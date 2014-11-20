@@ -1,0 +1,54 @@
+name: ethereum-merkle-patricia-db
+version: 0.0.1
+cabal-version: >=1.10
+build-type: Simple
+author: Jamshid
+license-file:  LICENSE
+maintainer:    jamshidnh@gmail.com
+synopsis: A modified Merkle Patricia DB
+category:      Data Structures
+license: BSD3
+description:  
+    The modified Merkle Patricia DB described in the Ethereum Yellowpaper
+
+source-repository head
+  type:     git
+  location: https://github.com/jamshidh/ethereum-merkle-patricia-db
+
+source-repository this
+  type:     git
+  location: https://github.com/jamshidh/ethereum-merkle-patricia-db
+  branch:   master
+  tag:      v0.0.2
+ 
+library
+    default-language: Haskell98
+    build-depends: 
+                   base >= 4 && < 5
+                 , resourcet
+                 , cryptohash
+                 , bytestring
+                 , data-default
+                 , nibblestring
+                 , leveldb-haskell
+                 , ethereum-rlp
+                 , transformers
+                 , binary
+                 , directory
+                 , haskoin
+    exposed-modules:
+                   Database.MerklePatricia
+    ghc-options: -Wall
+    buildable: True
+    hs-source-dirs: src
+
+Test-Suite test-nibblestring
+    default-language: Haskell98
+    type:               exitcode-stdio-1.0
+    main-is:            Main.hs
+    hs-source-dirs:     test, src
+    build-depends:      base >=4 && < 5
+                    , test-framework
+                    , test-framework-hunit
+                    , HUnit
+                    , containers
