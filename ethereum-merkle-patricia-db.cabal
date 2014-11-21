@@ -38,9 +38,11 @@ library
                  , haskoin
     exposed-modules:
                    Database.MerklePatricia
+                 , Database.DBs
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
+
 
 Test-Suite test-nibblestring
     default-language: Haskell98

@@ -28,38 +28,6 @@ import qualified Database.LevelDB as DB
 import Data.RLP
 import Database.DBs
 
---import Debug.Trace
-
-{-
-showAllKeyVal::DB->ResourceT IO ()
-showAllKeyVal db = do
-  i <- DB.iterOpen (stateDB db) def
-  DB.iterFirst i
-  valid <- DB.iterValid i
-  if valid
-    then showAllKeyVal' i
-    else liftIO $ putStrLn "no keys"
-  where
-    showAllKeyVal'::DB.Iterator->ResourceT IO ()
-    showAllKeyVal' i = do
-      Just key <- DB.iterKey i
-      Just val <- (getNodeData db{stateRoot=SHAPtr key})::ResourceT IO (Maybe (NodeData B.ByteString))
-      --Just byteStringValue <- DB.iterValue i
-      --let val = (rlpDecode $ rlpDeserialize $ byteStringValue)::NodeData
-      liftIO $ putStrLn $ "----------\n" ++ format (SHAPtr key)
-      liftIO $ putStrLn $ format val
-      DB.iterNext i
-      v <- DB.iterValid i
-      if v
-        then showAllKeyVal' i
-        else return ()
--}
-
-{-
-sha2SHAPtr::SHA->SHAPtr
-sha2SHAPtr (SHA x) = SHAPtr $ B.pack $ word256ToBytes x
--}
-
 blankRoot::SHAPtr
 blankRoot = SHAPtr (C.hash 256 "")
 
@@ -67,26 +35,26 @@ isBlankDB::SHAPtr->Bool
 isBlankDB x | blankRoot == x = True
 isBlankDB _ = False
 
-getNodeData::DB->ResourceT IO (Maybe NodeData)
-getNodeData db@DB{stateRoot=SHAPtr p} = do
-  fmap bytes2NodeData <$> DB.get (stateDB db) def p
+getNodeData::StateDB->ResourceT IO (Maybe NodeData)
+getNodeData db@StateDB{stateRoot=SHAPtr p} = do
+  fmap bytes2NodeData <$> DB.get (ldb db) def p
         where
           bytes2NodeData::B.ByteString->NodeData
           bytes2NodeData bytes | B.null bytes = EmptyNodeData
           bytes2NodeData bytes = rlpDecode $ rlpDeserialize bytes
 
 
-pairOrPtr2NodeData::DB->PairOrPtr->ResourceT IO (Maybe NodeData)
+pairOrPtr2NodeData::StateDB->PairOrPtr->ResourceT IO (Maybe NodeData)
 pairOrPtr2NodeData _ (APair key val) = return $ Just $ ShortcutNodeData key $ Right val
 pairOrPtr2NodeData db (APtr p) = getNodeData db{stateRoot=p}
 
 
-pairOrPtr2KeyVals::DB->PairOrPtr->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+pairOrPtr2KeyVals::StateDB->PairOrPtr->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
 pairOrPtr2KeyVals _ (APair key val) key' | key' `N.isPrefixOf` key = return [(key, val)]
 pairOrPtr2KeyVals db (APtr p) key = getKeyVals db{stateRoot = p} key
 
 
-getKeyVals::DB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+getKeyVals::StateDB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
 getKeyVals db key = do
   maybeNodeData <- getNodeData db
   let nodeData =case maybeNodeData of
@@ -115,11 +83,11 @@ nodeDataSerialize::NodeData->B.ByteString
 nodeDataSerialize EmptyNodeData = B.empty
 nodeDataSerialize x = rlpSerialize $ rlpEncode x
 
-putNodeData::DB->NodeData->ResourceT IO SHAPtr
+putNodeData::StateDB->NodeData->ResourceT IO SHAPtr
 putNodeData db nd = do
   let bytes = nodeDataSerialize nd
       ptr = C.hash 256 bytes
-  DB.put (stateDB db) def ptr bytes
+  DB.put (ldb db) def ptr bytes
   return $ SHAPtr ptr
 
 slotIsEmpty::[Maybe PairOrPtr]->N.Nibble->Bool
@@ -145,7 +113,7 @@ getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (get
                                         prefixTheCommonPrefix c (p, x, y) = (c:p, x, y)
 getCommonPrefix x y = ([], x, y)
 
-newShortcut::DB->N.NibbleString->Either SHAPtr RLPObject->ResourceT IO PairOrPtr
+newShortcut::StateDB->N.NibbleString->Either SHAPtr RLPObject->ResourceT IO PairOrPtr
 newShortcut _ key (Right val) | 32 > B.length bytes = return $ APair key val
                       where 
                         key' = termNibbleString2String True key
@@ -153,7 +121,7 @@ newShortcut _ key (Right val) | 32 > B.length bytes = return $ APair key val
 newShortcut db key val = APtr <$> putNodeData db (ShortcutNodeData key val)
 
 
-getNewNodeDataFromPut::DB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
+getNewNodeDataFromPut::StateDB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
 
@@ -215,13 +183,13 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
 
 --getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
 
-putKeyVal::DB->N.NibbleString->RLPObject->ResourceT IO DB
+putKeyVal::StateDB->N.NibbleString->RLPObject->ResourceT IO StateDB
 putKeyVal db key val = do
   --TODO- add nicer error message if stateRoot doesn't exist
   Just curNodeData <- getNodeData db
   nextNodeData <- getNewNodeDataFromPut db key val curNodeData
   let k = C.hash 256 $ nodeDataSerialize nextNodeData 
-  DB.put (stateDB db) def k $ nodeDataSerialize nextNodeData
+  DB.put (ldb db) def k $ nodeDataSerialize nextNodeData
   return db{stateRoot=SHAPtr k}
 
 prependToKey::N.NibbleString->(N.NibbleString, RLPObject)->(N.NibbleString, RLPObject)
