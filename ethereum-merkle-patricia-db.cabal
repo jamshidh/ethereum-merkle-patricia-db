@@ -38,18 +38,26 @@ library
                  , haskoin
     exposed-modules:
                    Database.MerklePatricia
-                 , Database.DBs
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
 
 
-Test-Suite test-nibblestring
+Test-Suite test-merkel-patricia-db
     default-language: Haskell98
     type:               exitcode-stdio-1.0
     main-is:            Main.hs
     hs-source-dirs:     test, src
     build-depends:      base >=4 && < 5
+                    , data-default
+                    , leveldb-haskell
+                    , resourcet
+                    , bytestring
+                    , transformers
+                    , binary
+                    , ethereum-rlp
+                    , cryptohash
+                    , nibblestring
                     , test-framework
                     , test-framework-hunit
                     , HUnit
