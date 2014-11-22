@@ -9,8 +9,7 @@ module Database.MerklePatricia (
   blankRoot,
   isBlankDB,
   getKeyVals,
-  putKeyVal,
-  PairOrPtr(..)
+  putKeyVal
   ) where
 
 import Control.Monad.Trans.Resource
@@ -43,7 +42,7 @@ isBlankDB x | blankRoot == x = True
 isBlankDB _ = False
 
 getNodeData::MPDB->NodeRef->ResourceT IO NodeData
-getNodeData db@MPDB{stateRoot=SHAPtr p} (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
+getNodeData _ (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
 getNodeData db (PtrRef ptr@(SHAPtr p)) = do
   bytes <- fromMaybe (error $ "Missing SHAPtr in call to getNodeData: " ++ show (pretty ptr)) <$>
            DB.get (ldb db) def p
@@ -65,9 +64,9 @@ nodeData2KeyVals db ShortcutNodeData{nextNibbleString=s,nextVal=Left ref} key | 
 nodeData2KeyVals _ ShortcutNodeData{} _ = return []
 nodeData2KeyVals db (FullNodeData {choices=cs}) key = 
   if N.null key
-  then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> nodeRef2KeyVals db pairOrPtr "" | (nextN, Just pairOrPtr) <- zip [0..] cs]
+  then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> nodeRef2KeyVals db ref "" | (nextN, Just ref) <- zip [0..] cs]
   else case cs!!fromIntegral (N.head key) of
-    Just pairOrPtr -> fmap (prependToKey $ N.singleton $ N.head key) <$> nodeRef2KeyVals db pairOrPtr (N.tail key)
+    Just ref -> fmap (prependToKey $ N.singleton $ N.head key) <$> nodeRef2KeyVals db ref (N.tail key)
     Nothing -> return []
 
 nodeRef2KeyVals::MPDB->NodeRef->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
@@ -102,9 +101,9 @@ slotIsEmpty _ 0 = False
 slotIsEmpty (_:rest) n = slotIsEmpty rest (n-1)
 
 replace::Integral i=>[a]->i->a->[a]
-replace list i newVal = left ++ [newVal] ++ right
+replace lst i newVal = left ++ [newVal] ++ right
             where
-              (left, _:right) = splitAt (fromIntegral i) list
+              (left, _:right) = splitAt (fromIntegral i) lst
 
 list2Options::N.Nibble->[(N.Nibble, NodeRef)]->[Maybe NodeRef]
 list2Options start _ | start > 15 = error $ "value of 'start' in list2Option is greater than 15, it is: " ++ show start
@@ -223,12 +222,10 @@ putKeyVal db key val = do
 prependToKey::N.NibbleString->(N.NibbleString, RLPObject)->(N.NibbleString, RLPObject)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
-data PairOrPtr = APair N.NibbleString RLPObject | APtr SHAPtr deriving (Show)
-
 data NodeData =
   EmptyNodeData |
   FullNodeData {
-    --choices::M.Map N.Nibble (Maybe PairOrPtr),
+    --choices::M.Map N.Nibble (Maybe NodeRef),
     choices::[Maybe NodeRef],
     nodeVal::Maybe RLPObject
   } |
@@ -305,7 +302,7 @@ instance RLPSerializable NodeData where
         RLPString "" -> Nothing
         x' -> Just x'
       getPtr::RLPObject->NodeRef
-      getPtr o@(RLPArray [key, v]) = SmallRef $ rlpSerialize o
+      getPtr o@(RLPArray [_, _]) = SmallRef $ rlpSerialize o
       getPtr p = PtrRef $ SHAPtr $ rlpDecode p
   rlpDecode x = error ("Missing case in rlpDecode for NodeData: " ++ show x)
 
