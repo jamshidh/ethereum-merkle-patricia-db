@@ -34,6 +34,9 @@ import Database.MerklePatricia.MPDB
 
 --import Debug.Trace
 
+type Key = N.NibbleString
+type Val = RLPObject
+
 blankRoot::SHAPtr
 blankRoot = SHAPtr (C.hash 256 "")
 
@@ -54,7 +57,7 @@ getNodeData db (PtrRef ptr@(SHAPtr p)) = do
 
 -------------------------
 
-nodeData2KeyVals::MPDB->NodeData->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+nodeData2KeyVals::MPDB->NodeData->Key->ResourceT IO [(Key, Val)]
 nodeData2KeyVals _ EmptyNodeData _ = return []
 nodeData2KeyVals _ (ShortcutNodeData {nextNibbleString=s,nextVal=Right v}) key | key `N.isPrefixOf` s = return [(s, v)]
 nodeData2KeyVals db ShortcutNodeData{nextNibbleString=s,nextVal=Left ref} key | key `N.isPrefixOf` s =
@@ -69,12 +72,12 @@ nodeData2KeyVals db (FullNodeData {choices=cs}) key =
     Just ref -> fmap (prependToKey $ N.singleton $ N.head key) <$> nodeRef2KeyVals db ref (N.tail key)
     Nothing -> return []
 
-nodeRef2KeyVals::MPDB->NodeRef->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+nodeRef2KeyVals::MPDB->NodeRef->Key->ResourceT IO [(Key, Val)]
 nodeRef2KeyVals db ref key = do
   nodeData <- getNodeData db ref
   nodeData2KeyVals db nodeData key
 
-getKeyVals::MPDB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+getKeyVals::MPDB->Key->ResourceT IO [(Key, Val)]
 getKeyVals db key = 
   nodeRef2KeyVals db (PtrRef $ stateRoot db) key
 
@@ -117,7 +120,7 @@ getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (get
                                         prefixTheCommonPrefix c (p, x, y) = (c:p, x, y)
 getCommonPrefix x y = ([], x, y)
 
-newShortcut::MPDB->N.NibbleString->Either NodeRef RLPObject->ResourceT IO NodeRef
+newShortcut::MPDB->Key->Either NodeRef Val->ResourceT IO NodeRef
 newShortcut _ key (Right val) | 32 > B.length bytes = return $ SmallRef bytes
                       where 
                         key' = termNibbleString2String True key
@@ -149,7 +152,7 @@ createNodeRef db nd = do
       DB.put (ldb db) def ptr bytes
       return $ PtrRef $ SHAPtr ptr
 
-getNewNodeDataFromPut::MPDB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
+getNewNodeDataFromPut::MPDB->Key->Val->NodeData->ResourceT IO NodeData
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
   ShortcutNodeData key $ Right val
 
@@ -211,7 +214,7 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
 
 --getNewNodeDataFromPut _ key _ nd = error ("Missing case in getNewNodeDataFromPut: " ++ format nd ++ ", " ++ format key)
 
-putKeyVal::MPDB->N.NibbleString->RLPObject->ResourceT IO MPDB
+putKeyVal::MPDB->Key->Val->ResourceT IO MPDB
 putKeyVal db key val = do
   curNodeData <- getNodeData db (PtrRef $ stateRoot db)
   nextNodeData <- getNewNodeDataFromPut db key val curNodeData
@@ -219,7 +222,7 @@ putKeyVal db key val = do
   DB.put (ldb db) def k $ nodeDataSerialize nextNodeData
   return db{stateRoot=SHAPtr k}
 
-prependToKey::N.NibbleString->(N.NibbleString, RLPObject)->(N.NibbleString, RLPObject)
+prependToKey::Key->(Key, Val)->(Key, Val)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
 data NodeData =
@@ -227,11 +230,11 @@ data NodeData =
   FullNodeData {
     --choices::M.Map N.Nibble (Maybe NodeRef),
     choices::[Maybe NodeRef],
-    nodeVal::Maybe RLPObject
+    nodeVal::Maybe Val
   } |
   ShortcutNodeData {
-    nextNibbleString::N.NibbleString,
-    nextVal::Either NodeRef RLPObject
+    nextNibbleString::Key,
+    nextVal::Either NodeRef Val
   } deriving Show
 
 string2TermNibbleString::String->(Bool, N.NibbleString)
@@ -268,7 +271,7 @@ instance RLPSerializable NodeData where
       encodeChoice Nothing = rlpEncode (0::Integer)
       encodeChoice (Just (PtrRef (SHAPtr x))) = rlpEncode x
       encodeChoice (Just (SmallRef o)) = rlpDeserialize o
-      encodeVal::Maybe RLPObject->RLPObject
+      encodeVal::Maybe Val->RLPObject
       encodeVal Nothing = rlpEncode (0::Integer)
       encodeVal (Just x) = x
   rlpEncode (ShortcutNodeData {nextNibbleString=s, nextVal=val}) = 
@@ -278,7 +281,7 @@ instance RLPSerializable NodeData where
         case val of
           Left _ -> False
           Right _ -> True
-      encodeVal::Either NodeRef RLPObject->RLPObject
+      encodeVal::Either NodeRef Val->RLPObject
       encodeVal (Left (PtrRef x)) = rlpEncode x
       encodeVal (Left (SmallRef x)) = rlpEncode x
       encodeVal (Right x) = x
