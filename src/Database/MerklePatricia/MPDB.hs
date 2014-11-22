@@ -10,10 +10,14 @@ import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Base16 as B16
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import Data.Default
 import Data.Functor
 import qualified Database.LevelDB as DB
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+--import Text.PrettyPrint.Leijen hiding ((<$>))
 
 import Data.RLP
 
@@ -24,6 +28,9 @@ data MPDB =
     }
 
 newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
+
+instance Pretty SHAPtr where
+  pretty (SHAPtr x) = yellow $ text $ BC.unpack (B16.encode x)
 
 instance Binary SHAPtr where
   put (SHAPtr x) = do

@@ -10,6 +10,7 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Default
 import Data.Functor
 import Data.List
+import qualified Data.Map as M
 import Data.Monoid
 import qualified Data.Set as S
 import qualified Database.LevelDB as LD
@@ -19,15 +20,6 @@ import Test.Framework.Providers.HUnit
 import Test.HUnit
 
 import qualified Data.NibbleString as N
-
-{-
-import Data.Address
-import DB.EthDB
-import Format
-import DB.ModifyStateDB
-import SHA
-import Util
--}
 
 import Data.RLP
 import Database.MerklePatricia
@@ -43,7 +35,7 @@ verifyDBDataIntegrity db valuesIn = do
     db2 <- putKeyVals db valuesIn
     --return (db, stateRoot2)
     valuesOut <- getKeyVals db2 (N.EvenNibbleString B.empty)
-    liftIO $ assertEqual "empty db didn't match" (S.fromList $ fmap rlpEncode <$> valuesIn) (S.fromList valuesOut)
+    liftIO $ assertEqual "empty db didn't match" (M.fromList $ fmap rlpEncode <$> valuesIn) (M.fromList valuesOut)
     return ()
 
 testShortcutNodeDataInsert::Assertion
@@ -67,10 +59,22 @@ testFullNodeDataInsert = do
           (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
         ]
 
+testOther::Assertion
+testOther = do
+  runResourceT $ do
+    db <- openMPDB "/tmp/tmpDB"
+    verifyDBDataIntegrity db [("", "abcd")]
+    verifyDBDataIntegrity db [("0123", "dog"), ("0123", "cat")]
+    verifyDBDataIntegrity db [("abcd", "abcd"), ("ab12", "bb"), ("ab21", "aefg")]
+    verifyDBDataIntegrity db [("ab", "abcd"), ("bb", "bb"), ("cb", "aefg"), ("bc", "qq")]
+
+
+
 main::IO ()
 main = 
   defaultMainWithOpts 
   [
    testCase "ShortcutNodeData Insert" testShortcutNodeDataInsert,
-   testCase "FullNodeData Insert" testFullNodeDataInsert
+   testCase "FullNodeData Insert" testFullNodeDataInsert,
+   testCase "other" testOther
   ] mempty

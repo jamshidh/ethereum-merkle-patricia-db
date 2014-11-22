@@ -4,7 +4,7 @@ module Database.MerklePatricia (
   --showAllKeyVal,
   SHAPtr(..),
   NodeData(..),
-  MPDB,
+  MPDB(..),
   openMPDB,
   blankRoot,
   isBlankDB,
@@ -17,18 +17,23 @@ import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as C
 import Data.Bits
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Base16 as B16
 import Data.ByteString.Internal
 import qualified Data.ByteString.Char8 as BC
 import Data.Default
 import Data.Function
 import Data.Functor
 import Data.List
+import Data.Maybe
 import qualified Data.NibbleString as N
 import qualified Database.LevelDB as DB
 --import qualified Data.Map as M
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.RLP
 import Database.MerklePatricia.MPDB
+
+--import Debug.Trace
 
 blankRoot::SHAPtr
 blankRoot = SHAPtr (C.hash 256 "")
@@ -37,62 +42,60 @@ isBlankDB::SHAPtr->Bool
 isBlankDB x | blankRoot == x = True
 isBlankDB _ = False
 
-getNodeData::MPDB->ResourceT IO (Maybe NodeData)
-getNodeData db@MPDB{stateRoot=SHAPtr p} = do
-  fmap bytes2NodeData <$> DB.get (ldb db) def p
-        where
-          bytes2NodeData::B.ByteString->NodeData
-          bytes2NodeData bytes | B.null bytes = EmptyNodeData
-          bytes2NodeData bytes = rlpDecode $ rlpDeserialize bytes
+getNodeData::MPDB->NodeRef->ResourceT IO NodeData
+getNodeData db@MPDB{stateRoot=SHAPtr p} (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
+getNodeData db (PtrRef ptr@(SHAPtr p)) = do
+  bytes <- fromMaybe (error $ "Missing SHAPtr in call to getNodeData: " ++ show (pretty ptr)) <$>
+           DB.get (ldb db) def p
+  return $ bytes2NodeData bytes
+    where
+      bytes2NodeData::B.ByteString->NodeData
+      bytes2NodeData bytes | B.null bytes = EmptyNodeData
+      bytes2NodeData bytes = rlpDecode $ rlpDeserialize bytes
 
+-------------------------
 
-pairOrPtr2NodeData::MPDB->PairOrPtr->ResourceT IO (Maybe NodeData)
-pairOrPtr2NodeData _ (APair key val) = return $ Just $ ShortcutNodeData key $ Right val
-pairOrPtr2NodeData db (APtr p) = getNodeData db{stateRoot=p}
+nodeData2KeyVals::MPDB->NodeData->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+nodeData2KeyVals _ EmptyNodeData _ = return []
+nodeData2KeyVals _ (ShortcutNodeData {nextNibbleString=s,nextVal=Right v}) key | key `N.isPrefixOf` s = return [(s, v)]
+nodeData2KeyVals db ShortcutNodeData{nextNibbleString=s,nextVal=Left ref} key | key `N.isPrefixOf` s =
+  fmap (prependToKey s) <$> nodeRef2KeyVals db ref ""
+nodeData2KeyVals db ShortcutNodeData{nextNibbleString=s,nextVal=Left ref} key | s `N.isPrefixOf` key =
+  fmap (prependToKey s) <$> nodeRef2KeyVals db ref (N.drop (N.length s) key)
+nodeData2KeyVals _ ShortcutNodeData{} _ = return []
+nodeData2KeyVals db (FullNodeData {choices=cs}) key = 
+  if N.null key
+  then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> nodeRef2KeyVals db pairOrPtr "" | (nextN, Just pairOrPtr) <- zip [0..] cs]
+  else case cs!!fromIntegral (N.head key) of
+    Just pairOrPtr -> fmap (prependToKey $ N.singleton $ N.head key) <$> nodeRef2KeyVals db pairOrPtr (N.tail key)
+    Nothing -> return []
 
-
-pairOrPtr2KeyVals::MPDB->PairOrPtr->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
-pairOrPtr2KeyVals _ (APair key val) key' | key' `N.isPrefixOf` key = return [(key, val)]
-pairOrPtr2KeyVals db (APtr p) key = getKeyVals db{stateRoot = p} key
-
+nodeRef2KeyVals::MPDB->NodeRef->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
+nodeRef2KeyVals db ref key = do
+  nodeData <- getNodeData db ref
+  nodeData2KeyVals db nodeData key
 
 getKeyVals::MPDB->N.NibbleString->ResourceT IO [(N.NibbleString, RLPObject)]
-getKeyVals db key = do
-  maybeNodeData <- getNodeData db
-  let nodeData =case maybeNodeData of
+getKeyVals db key = 
+  nodeRef2KeyVals db (PtrRef $ stateRoot db) key
+
+{-
+let nodeData =case maybeNodeData of
                   Nothing -> error $ "Error calling getKeyVals, stateRoot doesn't exist: " ++ show (stateRoot db)
                   Just x -> x
-  nextVals <- 
-    case nodeData of
-      FullNodeData {choices=cs} -> do
-        if N.null key
-          then concat <$> sequence [fmap (prependToKey (N.singleton nextN)) <$> pairOrPtr2KeyVals db pairOrPtr "" | (nextN, Just pairOrPtr) <- zip [0..] cs]
-          else case cs!!fromIntegral (N.head key) of
-          Just pairOrPtr -> fmap (prependToKey $ N.singleton $ N.head key) <$> pairOrPtr2KeyVals db pairOrPtr (N.tail key)
-          Nothing -> return []
-      ShortcutNodeData{nextNibbleString=s,nextVal=Right v} | key `N.isPrefixOf` s ->
-        return [(s, v)]
-      ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | key `N.isPrefixOf` s -> 
-        fmap (prependToKey s) <$> getKeyVals db{stateRoot=nextP} ""
-      ShortcutNodeData{nextNibbleString=s,nextVal=Left nextP} | s `N.isPrefixOf` key ->
-        fmap (prependToKey s) <$> getKeyVals db{stateRoot=nextP} (N.drop (N.length s) key)
-      _ -> return []
+
+      nextVals <- 
   case (N.null key, nodeData) of
     (True, FullNodeData{nodeVal = Just v}) -> return (("", v):nextVals)
     _ -> return nextVals
+-}
+------------------------------------
 
 nodeDataSerialize::NodeData->B.ByteString
 nodeDataSerialize EmptyNodeData = B.empty
 nodeDataSerialize x = rlpSerialize $ rlpEncode x
 
-putNodeData::MPDB->NodeData->ResourceT IO SHAPtr
-putNodeData db nd = do
-  let bytes = nodeDataSerialize nd
-      ptr = C.hash 256 bytes
-  DB.put (ldb db) def ptr bytes
-  return $ SHAPtr ptr
-
-slotIsEmpty::[Maybe PairOrPtr]->N.Nibble->Bool
+slotIsEmpty::[Maybe NodeRef]->N.Nibble->Bool
 slotIsEmpty [] _ = error ("slotIsEmpty was called for value greater than the size of the list")
 slotIsEmpty (Nothing:_) 0 = True
 slotIsEmpty _ 0 = False
@@ -103,7 +106,7 @@ replace list i newVal = left ++ [newVal] ++ right
             where
               (left, _:right) = splitAt (fromIntegral i) list
 
-list2Options::N.Nibble->[(N.Nibble, PairOrPtr)]->[Maybe PairOrPtr]
+list2Options::N.Nibble->[(N.Nibble, NodeRef)]->[Maybe NodeRef]
 list2Options start _ | start > 15 = error $ "value of 'start' in list2Option is greater than 15, it is: " ++ show start
 list2Options start [] = replicate (fromIntegral $ 0x10 - start) Nothing
 list2Options start ((firstNibble, firstPtr):rest) =
@@ -115,13 +118,37 @@ getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (get
                                         prefixTheCommonPrefix c (p, x, y) = (c:p, x, y)
 getCommonPrefix x y = ([], x, y)
 
-newShortcut::MPDB->N.NibbleString->Either SHAPtr RLPObject->ResourceT IO PairOrPtr
-newShortcut _ key (Right val) | 32 > B.length bytes = return $ APair key val
+newShortcut::MPDB->N.NibbleString->Either NodeRef RLPObject->ResourceT IO NodeRef
+newShortcut _ key (Right val) | 32 > B.length bytes = return $ SmallRef bytes
                       where 
                         key' = termNibbleString2String True key
                         bytes = rlpSerialize $ RLPArray [rlpEncode $ BC.unpack key', val]
-newShortcut db key val = APtr <$> putNodeData db (ShortcutNodeData key val)
+newShortcut db key val = PtrRef <$> putNodeData db (ShortcutNodeData key val)
 
+
+putNodeData::MPDB->NodeData->ResourceT IO SHAPtr
+putNodeData db nd = do
+  let bytes = nodeDataSerialize nd
+      ptr = C.hash 256 bytes
+  DB.put (ldb db) def ptr bytes
+  return $ SHAPtr ptr
+
+
+data NodeRef = SmallRef B.ByteString | PtrRef SHAPtr deriving (Show)
+
+instance Pretty NodeRef where
+  pretty (SmallRef x) = green $ text $ BC.unpack $ B16.encode x
+  pretty (PtrRef x) = green $ pretty x
+
+createNodeRef::MPDB->NodeData->ResourceT IO NodeRef
+createNodeRef db nd = do
+  let bytes = nodeDataSerialize nd
+  if B.length bytes < 32
+    then return $ SmallRef bytes
+    else do
+      let ptr = C.hash 256 bytes
+      DB.put (ldb db) def ptr bytes
+      return $ PtrRef $ SHAPtr ptr
 
 getNewNodeDataFromPut::MPDB->N.NibbleString->RLPObject->NodeData->ResourceT IO NodeData
 getNewNodeDataFromPut _ key val EmptyNodeData = return $
@@ -134,9 +161,9 @@ getNewNodeDataFromPut db key val (FullNodeData options nodeValue)
 getNewNodeDataFromPut db key val (FullNodeData options nodeValue) = do
   let Just conflictingNode = options!!fromIntegral (N.head key)
   --TODO- add nicer error message if stateRoot doesn't exist
-  Just conflictingNodeData <- (pairOrPtr2NodeData db conflictingNode::ResourceT IO (Maybe NodeData))
+  conflictingNodeData <- getNodeData db conflictingNode
   newNodeData <- getNewNodeDataFromPut db (N.tail key) val conflictingNodeData
-  newNode <- APtr <$> putNodeData db newNodeData
+  newNode <- PtrRef <$> putNodeData db newNodeData
   return $ FullNodeData (replace options (N.head key) $ Just newNode) nodeValue
 
 getNewNodeDataFromPut _ key1 val (ShortcutNodeData key2 (Right _)) | key1 == key2 =
@@ -156,23 +183,23 @@ getNewNodeDataFromPut _ key1 val1 (ShortcutNodeData k (Right _)) | N.null key1 =
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = do
   node1 <- newShortcut db (N.drop (N.length key1) key2) val2
   let options = list2Options 0 [(N.head $ N.drop (N.length key1) key2, node1)]
-  midNode <- putNodeData db $ FullNodeData options $ Just val1
+  midNode <- createNodeRef db $ FullNodeData options $ Just val1
   return $ ShortcutNodeData key1 $ Left midNode
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Right val2)) | key2 `N.isPrefixOf` key1 = do
   node1 <- newShortcut db (N.drop (N.length key2) key1) $ Right val1
   let options = list2Options 0 [(N.head $ N.drop (N.length key2) key1, node1)]
-  midNode <- putNodeData db $ FullNodeData options $ Just val2
+  midNode <- createNodeRef db $ FullNodeData options $ Just val2
   return $ ShortcutNodeData key2 $ Left midNode
-getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left val2)) | key2 `N.isPrefixOf` key1 = do
-  Just nodeData <- getNodeData db{stateRoot=val2}
+getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 (Left ref)) | key2 `N.isPrefixOf` key1 = do
+  nodeData <- getNodeData db ref
   newNodeData <- getNewNodeDataFromPut db (N.drop (N.length key2) key1) val1 nodeData 
-  newNode <- putNodeData db newNodeData
+  newNode <- createNodeRef db newNodeData
   return $ ShortcutNodeData key2 $ Left newNode
 getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) | N.head key1 == N.head key2 = do
   node1 <- newShortcut db (N.pack $ tail suffix1) $ Right val1
   node2 <- newShortcut db (N.pack $ tail suffix2) val2
   let options = list2Options 0 (sortBy (compare `on` fst) [(head suffix1, node1), (head suffix2, node2)])
-  midNode <- putNodeData db $ FullNodeData options Nothing
+  midNode <- createNodeRef db $ FullNodeData options Nothing
   return $ ShortcutNodeData (N.pack commonPrefix) $ Left midNode
       where
         (commonPrefix, suffix1, suffix2) = getCommonPrefix (N.unpack key1) (N.unpack key2)
@@ -187,8 +214,7 @@ getNewNodeDataFromPut db key1 val1 (ShortcutNodeData key2 val2) = do
 
 putKeyVal::MPDB->N.NibbleString->RLPObject->ResourceT IO MPDB
 putKeyVal db key val = do
-  --TODO- add nicer error message if stateRoot doesn't exist
-  Just curNodeData <- getNodeData db
+  curNodeData <- getNodeData db (PtrRef $ stateRoot db)
   nextNodeData <- getNewNodeDataFromPut db key val curNodeData
   let k = C.hash 256 $ nodeDataSerialize nextNodeData 
   DB.put (ldb db) def k $ nodeDataSerialize nextNodeData
@@ -203,12 +229,12 @@ data NodeData =
   EmptyNodeData |
   FullNodeData {
     --choices::M.Map N.Nibble (Maybe PairOrPtr),
-    choices::[Maybe PairOrPtr],
+    choices::[Maybe NodeRef],
     nodeVal::Maybe RLPObject
   } |
   ShortcutNodeData {
     nextNibbleString::N.NibbleString,
-    nextVal::Either SHAPtr RLPObject
+    nextVal::Either NodeRef RLPObject
   } deriving Show
 
 string2TermNibbleString::String->(Bool, N.NibbleString)
@@ -241,11 +267,10 @@ instance RLPSerializable NodeData where
   rlpEncode EmptyNodeData = error "rlpEncode should never be called on EmptyNodeData.  Use rlpSerialize instead."
   rlpEncode (FullNodeData {choices=cs, nodeVal=val}) = RLPArray ((encodeChoice <$> cs) ++ [encodeVal val])
     where
+      encodeChoice::Maybe NodeRef->RLPObject
       encodeChoice Nothing = rlpEncode (0::Integer)
-      encodeChoice (Just (APtr (SHAPtr x))) = rlpEncode x
-      encodeChoice (Just (APair key v)) = RLPArray [rlpEncode $ BC.unpack key', v]
-          where 
-            key' = termNibbleString2String True key
+      encodeChoice (Just (PtrRef (SHAPtr x))) = rlpEncode x
+      encodeChoice (Just (SmallRef o)) = rlpDeserialize o
       encodeVal::Maybe RLPObject->RLPObject
       encodeVal Nothing = rlpEncode (0::Integer)
       encodeVal (Just x) = x
@@ -256,7 +281,9 @@ instance RLPSerializable NodeData where
         case val of
           Left _ -> False
           Right _ -> True
-      encodeVal (Left x) = rlpEncode x
+      encodeVal::Either NodeRef RLPObject->RLPObject
+      encodeVal (Left (PtrRef x)) = rlpEncode x
+      encodeVal (Left (SmallRef x)) = rlpEncode x
       encodeVal (Right x) = x
 
 
@@ -264,7 +291,9 @@ instance RLPSerializable NodeData where
   rlpDecode (RLPArray [a, val]) = 
     if terminator
     then ShortcutNodeData s $ Right val
-    else ShortcutNodeData s (Left $ SHAPtr (BC.pack $ rlpDecode val))
+    else if B.length (rlpSerialize val) >= 32
+         then ShortcutNodeData s (Left $ PtrRef $ SHAPtr (BC.pack $ rlpDecode val))
+         else ShortcutNodeData s (Left $ SmallRef $ rlpDecode val)
     where
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
@@ -275,8 +304,8 @@ instance RLPSerializable NodeData where
         RLPScalar 0 -> Nothing
         RLPString "" -> Nothing
         x' -> Just x'
-      getPtr::RLPObject->PairOrPtr
-      getPtr (RLPArray [key, v]) = APair (snd $ string2TermNibbleString $ rlpDecode key) v
-      getPtr p = APtr $ SHAPtr $ rlpDecode p
+      getPtr::RLPObject->NodeRef
+      getPtr o@(RLPArray [key, v]) = SmallRef $ rlpSerialize o
+      getPtr p = PtrRef $ SHAPtr $ rlpDecode p
   rlpDecode x = error ("Missing case in rlpDecode for NodeData: " ++ show x)
 

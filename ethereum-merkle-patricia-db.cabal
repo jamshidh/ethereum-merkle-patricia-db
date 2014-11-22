@@ -28,6 +28,7 @@ library
                  , resourcet
                  , cryptohash
                  , bytestring
+                 , base16-bytestring
                  , data-default
                  , nibblestring
                  , leveldb-haskell
@@ -36,8 +37,12 @@ library
                  , binary
                  , directory
                  , haskoin
+                 , wl-pprint
+                 , ansi-wl-pprint
     exposed-modules:
                    Database.MerklePatricia
+    other-modules:
+                   Database.MerklePatricia.MPDB
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
@@ -53,11 +58,14 @@ Test-Suite test-merkel-patricia-db
                     , leveldb-haskell
                     , resourcet
                     , bytestring
+                    , base16-bytestring
                     , transformers
                     , binary
                     , ethereum-rlp
                     , cryptohash
                     , nibblestring
+                    , wl-pprint
+                    , ansi-wl-pprint
                     , test-framework
                     , test-framework-hunit
                     , HUnit
