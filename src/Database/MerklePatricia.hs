@@ -3,7 +3,7 @@
 module Database.MerklePatricia (
   --showAllKeyVal,
   SHAPtr(..),
-  NodeData(..),
+--  NodeData(..),
   MPDB(..),
   openMPDB,
   blankRoot,
@@ -28,6 +28,7 @@ import qualified Data.NibbleString as N
 import qualified Database.LevelDB as DB
 --import qualified Data.Map as M
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import Numeric
 
 import Data.RLP
 import Database.MerklePatricia.MPDB
@@ -236,6 +237,21 @@ data NodeData =
     nextNibbleString::Key,
     nextVal::Either NodeRef Val
   } deriving Show
+      
+formatVal::Maybe RLPObject->Doc
+formatVal Nothing = red $ text "NULL"
+formatVal (Just x) = green $ pretty x
+                
+instance Pretty NodeData where
+  pretty EmptyNodeData = text "    <EMPTY>"
+  pretty (ShortcutNodeData s (Left p)) = text $ "    " ++ show (pretty s) ++ " -> " ++ show (pretty p)
+  pretty (ShortcutNodeData s (Right val)) = text $ "    " ++ show (pretty s) ++ " -> " ++ show (green $ pretty val)
+  pretty (FullNodeData cs val) = text "    val: " </> formatVal val </> text "\n        " </> vsep (showChoice <$> zip ([0..]::[Int]) cs)
+    where
+      showChoice (v, Just p) = blue (text $ showHex v "") </> text ": " </> green (pretty p)
+      showChoice (v, Nothing) = blue (text $ showHex v "") </> text ": " </> red (text "NULL")
+
+
 
 string2TermNibbleString::String->(Bool, N.NibbleString)
 string2TermNibbleString [] = error "string2TermNibbleString called with empty String"
