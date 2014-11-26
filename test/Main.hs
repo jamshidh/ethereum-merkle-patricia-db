@@ -35,7 +35,7 @@ verifyDBDataIntegrity db valuesIn = do
     db2 <- putKeyVals db valuesIn
     --return (db, stateRoot2)
     valuesOut <- getKeyVals db2 (N.EvenNibbleString B.empty)
-    liftIO $ assertEqual "empty db didn't match" (M.fromList $ fmap rlpEncode <$> valuesIn) (M.fromList valuesOut)
+    liftIO $ assertEqual "roundtrip in-out db didn't match" (M.fromList $ fmap rlpEncode <$> valuesIn) (M.fromList valuesOut)
     return ()
 
 testShortcutNodeDataInsert::Assertion
@@ -46,6 +46,16 @@ testShortcutNodeDataInsert = do
         [
           (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
           (N.EvenNibbleString $ BC.pack "aefg", BC.pack "aefg")
+        ]
+
+testShortcutNodeDataInsert2::Assertion
+testShortcutNodeDataInsert2 = do
+  runResourceT $ do
+    db <- openMPDB "/tmp/tmpDB"
+    verifyDBDataIntegrity db
+        [
+          (N.EvenNibbleString $ BC.pack "abcd", BC.pack "abcd"),
+          (N.EvenNibbleString $ BC.pack "bb", BC.pack "bb")
         ]
 
 testFullNodeDataInsert::Assertion
@@ -75,6 +85,7 @@ main =
   defaultMainWithOpts 
   [
    testCase "ShortcutNodeData Insert" testShortcutNodeDataInsert,
+   testCase "ShortcutNodeData2 Insert" testShortcutNodeDataInsert2,
    testCase "FullNodeData Insert" testFullNodeDataInsert,
    testCase "other" testOther
   ] mempty
