@@ -89,8 +89,11 @@ replace lst i newVal = left ++ [newVal] ++ right
               (left, _:right) = splitAt (fromIntegral i) lst
 
 list2Options::N.Nibble->[(N.Nibble, NodeRef)]->[Maybe NodeRef]
-list2Options start _ | start > 15 = error $ "value of 'start' in list2Option is greater than 15, it is: " ++ show start
 list2Options start [] = replicate (fromIntegral $ 0x10 - start) Nothing
+list2Options start x | start > 15 =
+  error $
+  "value of 'start' in list2Option is greater than 15, it is: " ++ show start
+  ++ ", second param is " ++ show x
 list2Options start ((firstNibble, firstPtr):rest) =
     replicate (fromIntegral $ firstNibble - start) Nothing ++ [Just firstPtr] ++ list2Options (firstNibble+1) rest
 
