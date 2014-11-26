@@ -33,11 +33,7 @@ library
                  , nibblestring
                  , leveldb-haskell
                  , ethereum-rlp
-                 , transformers
                  , binary
-                 , directory
-                 , haskoin
-                 , wl-pprint
                  , ansi-wl-pprint
     exposed-modules:
                    Database.MerklePatricia
@@ -64,7 +60,6 @@ Test-Suite test-merkel-patricia-db
                     , ethereum-rlp
                     , cryptohash
                     , nibblestring
-                    , wl-pprint
                     , ansi-wl-pprint
                     , test-framework
                     , test-framework-hunit
