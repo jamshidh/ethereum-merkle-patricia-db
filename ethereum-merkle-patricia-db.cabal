@@ -39,6 +39,8 @@ library
                    Database.MerklePatricia
     other-modules:
                    Database.MerklePatricia.MPDB
+                   Database.MerklePatricia.SHAPtr
+                   Database.MerklePatricia.NodeData
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src
