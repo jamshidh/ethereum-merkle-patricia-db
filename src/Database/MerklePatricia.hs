@@ -1,9 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Database.MerklePatricia (
-  --showAllKeyVal,
   SHAPtr(..),
---  NodeData(..),
   MPDB(..),
   openMPDB,
   blankRoot,
