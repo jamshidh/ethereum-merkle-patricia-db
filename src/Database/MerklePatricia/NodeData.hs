@@ -4,7 +4,8 @@ module Database.MerklePatricia.NodeData (
   Key,
   Val,
   NodeData(..),
-  NodeRef(..)
+  NodeRef(..),
+  emptyRef
   ) where
 
 import Data.Bits
@@ -30,7 +31,10 @@ type Val = RLPObject
 
 -------------------------
 
-data NodeRef = SmallRef B.ByteString | PtrRef SHAPtr deriving (Show)
+data NodeRef = SmallRef B.ByteString | PtrRef SHAPtr deriving (Show, Eq)
+
+emptyRef::NodeRef
+emptyRef = SmallRef $ B.pack [0x80]
 
 instance Pretty NodeRef where
   pretty (SmallRef x) = green $ text $ BC.unpack $ B16.encode x
@@ -43,7 +47,7 @@ data NodeData =
   FullNodeData {
     -- Why not make choices a map (choices::M.Map N.Nibble NodeRef)?  Because this type tends to be created 
     -- more than items are looked up in it....  It would actually slow things down to use it.
-    choices::[Maybe NodeRef],
+    choices::[NodeRef],
     nodeVal::Maybe Val
   } |
   ShortcutNodeData {
@@ -61,17 +65,18 @@ instance Pretty NodeData where
   pretty (ShortcutNodeData s (Right val)) = text $ "    " ++ show (pretty s) ++ " -> " ++ show (green $ pretty val)
   pretty (FullNodeData cs val) = text "    val: " </> formatVal val </> text "\n        " </> vsep (showChoice <$> zip ([0..]::[Int]) cs)
     where
-      showChoice (v, Just p) = blue (text $ showHex v "") </> text ": " </> green (pretty p)
-      showChoice (v, Nothing) = blue (text $ showHex v "") </> text ": " </> red (text "NULL")
+      showChoice::(Int, NodeRef)->Doc
+      showChoice (v, SmallRef "") = blue (text $ showHex v "") </> text ": " </> red (text "NULL")
+      showChoice (v, p) = blue (text $ showHex v "") </> text ": " </> green (pretty p)
 
 instance RLPSerializable NodeData where
-  rlpEncode EmptyNodeData = error "rlpEncode should never be called on EmptyNodeData.  Use rlpSerialize instead."
+  rlpEncode EmptyNodeData = RLPString ""
   rlpEncode (FullNodeData {choices=cs, nodeVal=val}) = RLPArray ((encodeChoice <$> cs) ++ [encodeVal val])
     where
-      encodeChoice::Maybe NodeRef->RLPObject
-      encodeChoice Nothing = rlpEncode (0::Integer)
-      encodeChoice (Just (PtrRef (SHAPtr x))) = rlpEncode x
-      encodeChoice (Just (SmallRef o)) = rlpDeserialize o
+      encodeChoice::NodeRef->RLPObject
+      encodeChoice (SmallRef "") = rlpEncode (0::Integer)
+      encodeChoice (PtrRef (SHAPtr x)) = rlpEncode x
+      encodeChoice (SmallRef o) = rlpDeserialize o
       encodeVal::Maybe Val->RLPObject
       encodeVal Nothing = rlpEncode (0::Integer)
       encodeVal (Just x) = x
@@ -87,16 +92,18 @@ instance RLPSerializable NodeData where
       encodeVal (Left (SmallRef x)) = rlpEncode x
       encodeVal (Right x) = x
 
-  rlpDecode (RLPArray [a, val]) = 
-    if terminator
-    then ShortcutNodeData s $ Right val
-    else if B.length (rlpSerialize val) >= 32
-         then ShortcutNodeData s (Left $ PtrRef $ SHAPtr (BC.pack $ rlpDecode val))
-         else ShortcutNodeData s (Left $ SmallRef $ rlpDecode val)
+  rlpDecode (RLPString "") = EmptyNodeData
+  rlpDecode (RLPScalar 0) = EmptyNodeData
+  rlpDecode (RLPArray [a, val])
+      | terminator = ShortcutNodeData s $ Right val
+      | B.length (rlpSerialize val) >= 32 =
+          ShortcutNodeData s (Left $ PtrRef $ SHAPtr (BC.pack $ rlpDecode val))
+      | otherwise =
+          ShortcutNodeData s (Left $ SmallRef $ rlpDecode val)
     where
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
-    FullNodeData (fmap getPtr <$> (\p -> case p of RLPScalar 0 -> Nothing; RLPString "" -> Nothing; _ -> Just p) <$> childPointers) val
+    FullNodeData (getPtr <$> childPointers) val
     where
       childPointers = init x
       val = case last x of

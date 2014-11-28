@@ -6,6 +6,7 @@ module Database.MerklePatricia.SHAPtr (
   blankRoot
   ) where
 
+import Control.Monad
 import qualified Crypto.Hash.SHA3 as C
 import Data.Binary
 import qualified Data.ByteString as B
@@ -22,10 +23,8 @@ instance Pretty SHAPtr where
   pretty (SHAPtr x) = yellow $ text $ BC.unpack (B16.encode x)
 
 instance Binary SHAPtr where
-  put (SHAPtr x) = do
-      sequence_ $ put <$> B.unpack x
-  get = do
-    error "get undefined for SHAPtr"
+  put (SHAPtr x) = sequence_ $ put <$> B.unpack x
+  get = SHAPtr <$> B.pack <$> replicateM 32 get
 
 instance RLPSerializable SHAPtr where
     rlpEncode (SHAPtr x) = rlpEncode x
