@@ -2,7 +2,6 @@
 
 module Database.MerklePatricia.SHAPtr (
   SHAPtr(..),
-  isBlankDB,
   blankRoot
   ) where
 
@@ -17,6 +16,13 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Data.RLP
 
+-- | Internal nodes are indexed in the underlying database by their 256-bit SHA3 hash.
+-- This types represents said hash.
+--
+-- The stateRoot is of this type, 
+-- (ie- the pointer to the full set of key/value pairs at a particular time in history), and
+-- will be of interest if you need to refer to older or parallel version of the data.
+
 newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
 
 instance Pretty SHAPtr where
@@ -30,10 +36,7 @@ instance RLPSerializable SHAPtr where
     rlpEncode (SHAPtr x) = rlpEncode x
     rlpDecode x = SHAPtr $ rlpDecode x
 
+-- | The stateRoot of the empty database.
 blankRoot::SHAPtr
 blankRoot = SHAPtr (C.hash 256 "")
-
-isBlankDB::SHAPtr->Bool
-isBlankDB x | blankRoot == x = True
-isBlankDB _ = False
 

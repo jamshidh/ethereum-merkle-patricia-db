@@ -26,7 +26,10 @@ import Database.MerklePatricia.SHAPtr
 
 -------------------------
 
+-- | The type of the database key
 type Key = N.NibbleString
+
+-- | The type of the values in the database
 type Val = RLPObject
 
 -------------------------

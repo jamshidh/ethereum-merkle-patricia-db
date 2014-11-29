@@ -1,14 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- | This is an implementation of the modified Merkle Patricia database described
+--  in the Ethereum Yellowpaper (<http://gavwood.com/paper.pdf>).  This modified version
+-- works like a canonical Merkle Patricia database, but includes certain optimizations.  In 
+-- particular, a new type of "shortcut node" has been added to represent multiple traditional 
+-- nodes that fall in a linear string (ie- a stretch of parent child nodes where no branch 
+-- choices exist).
+--
+-- A Merkle Patricia Database effeciently retains its full history, and a snapshot of all key-value pairs
+-- at a given time can be looked up using a "stateRoot" (a pointer to the root of the tree representing
+-- that data).  Many of the functions in this module work by updating this object, so for anything more 
+-- complicated than a single update, use of the state monad is recommended.
+--
+-- The underlying data is actually stored in LevelDB.  This module provides the logic to organize 
+-- the key-value pairs in the appropriate Patricia Merkle Tree.
+
 module Database.MerklePatricia (
-  SHAPtr(..),
+  Key,
+  Val,
+  putKeyVal,
+  getKeyVals,
+  deleteKey,
   MPDB(..),
   openMPDB,
+  SHAPtr(..),
   blankRoot,
-  isBlankDB,
-  getKeyVals,
-  putKeyVal,
-  deleteKey
   ) where
 
 import Control.Monad.Trans.Resource
@@ -70,7 +86,12 @@ getKeyVals_NodeRef db ref key = do
   nodeData <- getNodeData db ref
   getKeyVals_NodeData db nodeData key
 
-getKeyVals::MPDB->Key->ResourceT IO [(Key, Val)]
+-- | Retrieves all key/value pairs whose key starts with the given parameter.
+
+
+getKeyVals::MPDB -- ^ Object containing the current stateRoot.
+          ->Key -- ^ The partial key (the query will return any key that is prefixed by this value)
+          ->ResourceT IO [(Key, Val)] -- ^ The requested data.
 getKeyVals db = 
   getKeyVals_NodeRef db (PtrRef $ stateRoot db)
 
@@ -191,7 +212,11 @@ putKV_NodeData db key1 val1 (ShortcutNodeData key2 val2) = do
       (list2Options 0 (sortBy (compare `on` fst) [(N.head key1, tailNode1), (N.head key2, tailNode2)]))
       Nothing
 
-putKeyVal::MPDB->Key->Val->ResourceT IO MPDB
+-- | Adds a new key/value pair.
+putKeyVal::MPDB -- ^ The object containing the current stateRoot.
+         ->Key -- ^ Key of the data to be inserted.
+         ->Val -- ^ Value of the new data
+         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the insert.
 putKeyVal db key val = do
   p <- putNodeData db =<< putKV_NodeData db key val =<< getNodeData db (PtrRef $ stateRoot db)
   return db{stateRoot=p}
@@ -262,8 +287,14 @@ deleteKey_NodeData db key (FullNodeData options val) = do
 -------------
 
 
+-- | Deletes a key (and its corresponding data) from the database.
+-- 
+-- Note that the key/value pair will still be present in the history, and can be accessed
+-- by using an older 'MPDB' object.
 
-deleteKey::MPDB->Key->ResourceT IO MPDB
+deleteKey::MPDB -- ^ The object containing the current stateRoot.
+         ->Key -- ^ The key to be deleted.
+         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the delete.
 deleteKey db key = do
   p <- putNodeData db =<< deleteKey_NodeData db key =<< getNodeData db (PtrRef $ stateRoot db)
   return db{stateRoot=p}
