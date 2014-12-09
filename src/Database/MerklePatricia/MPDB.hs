@@ -33,5 +33,5 @@ openMPDB::String -- ^ The filepath with the location of the underlying database.
         ->ResourceT IO MPDB
 openMPDB path = do
   ldb' <- DB.open path def{DB.createIfMissing=True}
-  DB.put ldb' def (BL.toStrict $ encode blankRoot) B.empty
-  return MPDB{ ldb=ldb', stateRoot=blankRoot }
+  DB.put ldb' def (BL.toStrict $ encode emptyTriePtr) B.empty
+  return MPDB{ ldb=ldb', stateRoot=emptyTriePtr }

@@ -18,13 +18,14 @@
 module Database.MerklePatricia (
   Key,
   Val,
+  initializeBlank,
   putKeyVal,
   getKeyVals,
   deleteKey,
   MPDB(..),
   openMPDB,
   SHAPtr(..),
-  blankRoot,
+  emptyTriePtr,
   ) where
 
 import Control.Monad.Trans.Resource
@@ -47,6 +48,12 @@ import Database.MerklePatricia.SHAPtr
 --import Debug.Trace
 
 
+
+initializeBlank::MPDB->ResourceT IO ()
+initializeBlank db =
+    let bytes = rlpSerialize $ rlpEncode (0::Integer)
+    in
+      DB.put (ldb db) def (C.hash 256 bytes) bytes
 
 
 getNodeData::MPDB->NodeRef->ResourceT IO NodeData

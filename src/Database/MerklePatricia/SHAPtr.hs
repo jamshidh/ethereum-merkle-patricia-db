@@ -2,7 +2,7 @@
 
 module Database.MerklePatricia.SHAPtr (
   SHAPtr(..),
-  blankRoot
+  emptyTriePtr
   ) where
 
 import Control.Monad
@@ -37,6 +37,5 @@ instance RLPSerializable SHAPtr where
     rlpDecode x = SHAPtr $ rlpDecode x
 
 -- | The stateRoot of the empty database.
-blankRoot::SHAPtr
-blankRoot = SHAPtr (C.hash 256 "")
-
+emptyTriePtr::SHAPtr
+emptyTriePtr = SHAPtr $ C.hash 256 $ rlpSerialize $ rlpEncode (0::Integer)
