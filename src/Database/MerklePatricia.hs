@@ -138,6 +138,7 @@ getCommonPrefix (c1:rest1) (c2:rest2) | c1 == c2 = prefixTheCommonPrefix c1 (get
 getCommonPrefix x y = ([], x, y)
 
 newShortcut::MPDB->Key->Either NodeRef Val->ResourceT IO NodeRef
+newShortcut _ key (Left ref) | N.null key = return ref
 newShortcut db key val = nodeData2NodeRef db $ ShortcutNodeData key val
 
 putNodeData::MPDB->NodeData->ResourceT IO SHAPtr
@@ -189,8 +190,8 @@ putKV_NodeData db key1 val (ShortcutNodeData key2 (Left ref)) | key1 == key2 = d
   newNodeRef <- putKV_NodeRef db key1 val ref
   return $ ShortcutNodeData key2 (Left newNodeRef)
 
-putKV_NodeData db "" val1 (ShortcutNodeData key2 (Right val2)) = do
-  newNodeRef <- newShortcut db (N.tail key2) $ Right val2
+putKV_NodeData db "" val1 (ShortcutNodeData key2 val2) = do
+  newNodeRef <- newShortcut db (N.tail key2) val2
   return $ FullNodeData (list2Options 0 [(N.head key2, newNodeRef)]) $ Just val1
 
 putKV_NodeData db key1 val1 (ShortcutNodeData key2 val2) | key1 `N.isPrefixOf` key2 = do
@@ -224,6 +225,7 @@ putKeyVal::MPDB -- ^ The object containing the current stateRoot.
          ->Key -- ^ Key of the data to be inserted.
          ->Val -- ^ Value of the new data
          ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the insert.
+--putKeyVal db key val | trace ("^^^^^^^^^^putKeyVal: key = " ++ show (pretty key) ++ ", val = " ++ show (pretty val)) False = undefined
 putKeyVal db key val = do
   p <- putNodeData db =<< putKV_NodeData db key val =<< getNodeData db (PtrRef $ stateRoot db)
   return db{stateRoot=p}
