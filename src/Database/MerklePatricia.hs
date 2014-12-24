@@ -104,10 +104,6 @@ getKeyVals db =
 
 ------------------------------------
 
-nodeDataSerialize::NodeData->B.ByteString
-nodeDataSerialize EmptyNodeData = B.empty
-nodeDataSerialize x = rlpSerialize $ rlpEncode x
-
 slotIsEmpty::[NodeRef]->N.Nibble->Bool
 slotIsEmpty [] _ = error "slotIsEmpty was called for value greater than the size of the list"
 slotIsEmpty (x:_) 0 | x == emptyRef = True
@@ -143,7 +139,7 @@ newShortcut db key val = nodeData2NodeRef db $ ShortcutNodeData key val
 
 putNodeData::MPDB->NodeData->ResourceT IO SHAPtr
 putNodeData db nd = do
-  let bytes = nodeDataSerialize nd
+  let bytes = rlpSerialize $ rlpEncode nd
       ptr = C.hash 256 bytes
   DB.put (ldb db) def ptr bytes
   return $ SHAPtr ptr
