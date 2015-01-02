@@ -19,7 +19,7 @@ source-repository this
   type:     git
   location: https://github.com/jamshidh/ethereum-merkle-patricia-db
   branch:   master
-  tag:      v0.0.2
+  tag:      v0.0.1
  
 library
     default-language: Haskell98
@@ -36,11 +36,11 @@ library
                  , binary
                  , ansi-wl-pprint
     exposed-modules:
-                   Database.MerklePatricia
+                   Blockchain.Database.MerklePatricia
     other-modules:
-                   Database.MerklePatricia.MPDB
-                   Database.MerklePatricia.SHAPtr
-                   Database.MerklePatricia.NodeData
+                   Blockchain.Database.MerklePatricia.MPDB
+                   Blockchain.Database.MerklePatricia.SHAPtr
+                   Blockchain.Database.MerklePatricia.NodeData
     ghc-options: -Wall
     buildable: True
     hs-source-dirs: src

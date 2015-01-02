@@ -15,7 +15,7 @@
 -- The underlying data is actually stored in LevelDB.  This module provides the logic to organize 
 -- the key-value pairs in the appropriate Patricia Merkle Tree.
 
-module Database.MerklePatricia (
+module Blockchain.Database.MerklePatricia (
   Key,
   Val,
   initializeBlank,
@@ -40,10 +40,10 @@ import qualified Data.NibbleString as N
 import qualified Database.LevelDB as DB
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Data.RLP
-import Database.MerklePatricia.MPDB
-import Database.MerklePatricia.NodeData
-import Database.MerklePatricia.SHAPtr
+import Blockchain.Data.RLP
+import Blockchain.Database.MerklePatricia.MPDB
+import Blockchain.Database.MerklePatricia.NodeData
+import Blockchain.Database.MerklePatricia.SHAPtr
 
 --import Debug.Trace
 

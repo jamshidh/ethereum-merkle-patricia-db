@@ -21,8 +21,8 @@ import Test.HUnit
 
 import qualified Data.NibbleString as N
 
-import Data.RLP
-import Database.MerklePatricia
+import Blockchain.Data.RLP
+import Blockchain.Database.MerklePatricia
 
 bigTest=
   [

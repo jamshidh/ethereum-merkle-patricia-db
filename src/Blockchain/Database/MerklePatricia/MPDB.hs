@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Database.MerklePatricia.MPDB (
+module Blockchain.Database.MerklePatricia.MPDB (
   MPDB(..),
   openMPDB
   ) where
@@ -13,7 +13,7 @@ import Data.Default
 import qualified Database.LevelDB as DB
 --import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Database.MerklePatricia.SHAPtr
+import Blockchain.Database.MerklePatricia.SHAPtr
 
 -- | This is the database reference type, contianing both the handle to the underlying database, as well
 -- as the stateRoot to the current tree holding the data.

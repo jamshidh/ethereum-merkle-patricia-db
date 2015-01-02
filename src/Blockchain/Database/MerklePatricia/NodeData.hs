@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Database.MerklePatricia.NodeData (
+module Blockchain.Database.MerklePatricia.NodeData (
   Key,
   Val,
   NodeData(..),
@@ -18,9 +18,8 @@ import qualified Data.NibbleString as N
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 import Numeric
 
-import Data.RLP
---import Database.MerklePatricia.MPDB
-import Database.MerklePatricia.SHAPtr
+import Blockchain.Data.RLP
+import Blockchain.Database.MerklePatricia.SHAPtr
 
 --import Debug.Trace
 

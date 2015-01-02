@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Database.MerklePatricia.SHAPtr (
+module Blockchain.Database.MerklePatricia.SHAPtr (
   SHAPtr(..),
   emptyTriePtr
   ) where
@@ -14,7 +14,7 @@ import qualified Data.ByteString.Char8 as BC
 import Data.Functor
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
-import Data.RLP
+import Blockchain.Data.RLP
 
 -- | Internal nodes are indexed in the underlying database by their 256-bit SHA3 hash.
 -- This types represents said hash.
