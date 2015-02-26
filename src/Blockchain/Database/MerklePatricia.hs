@@ -22,6 +22,7 @@ module Blockchain.Database.MerklePatricia (
   putKeyVal,
   getKeyVals,
   deleteKey,
+  keyExists,
   MPDB(..),
   openMPDB,
   SHAPtr(..),
@@ -303,6 +304,14 @@ deleteKey::MPDB -- ^ The object containing the current stateRoot.
 deleteKey db key = do
   p <- putNodeData db =<< deleteKey_NodeData db key =<< getNodeData db (PtrRef $ stateRoot db)
   return db{stateRoot=p}
+
+-- | Returns True is a key exists.
+keyExists::MPDB -- ^ The object containing the current stateRoot.
+         ->Key -- ^ The key to be deleted.
+         ->ResourceT IO Bool -- ^ True if the key exists
+keyExists db key = do
+  vals <- getKeyVals db key
+  return $ not . null $ filter ((key ==) . fst) vals
 
 
 prependToKey::Key->(Key, Val)->(Key, Val)
