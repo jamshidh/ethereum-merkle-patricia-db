@@ -91,7 +91,7 @@ instance RLPSerializable NodeData where
           Right _ -> True
       encodeVal::Either NodeRef Val->RLPObject
       encodeVal (Left (PtrRef x)) = rlpEncode x
-      encodeVal (Left (SmallRef x)) = rlpEncode x
+      encodeVal (Left (SmallRef x)) = rlpDeserialize x
       encodeVal (Right x) = x
 
   rlpDecode (RLPString "") = EmptyNodeData
@@ -101,7 +101,7 @@ instance RLPSerializable NodeData where
       | B.length (rlpSerialize val) >= 32 =
           ShortcutNodeData s (Left $ PtrRef $ SHAPtr (BC.pack $ rlpDecode val))
       | otherwise =
-          ShortcutNodeData s (Left $ SmallRef $ rlpDecode val)
+          ShortcutNodeData s (Left $ SmallRef $ rlpSerialize val)
     where
       (terminator, s) = string2TermNibbleString $ rlpDecode a
   rlpDecode (RLPArray x) | length x == 17 =
