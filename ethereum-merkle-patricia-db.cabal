@@ -37,9 +37,9 @@ library
                  , ansi-wl-pprint
     exposed-modules:
                    Blockchain.Database.MerklePatricia
+                   Blockchain.Database.MerklePatricia.SHAPtr
     other-modules:
                    Blockchain.Database.MerklePatricia.MPDB
-                   Blockchain.Database.MerklePatricia.SHAPtr
                    Blockchain.Database.MerklePatricia.NodeData
     ghc-options: -Wall
     buildable: True
