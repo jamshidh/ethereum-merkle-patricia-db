@@ -23,7 +23,7 @@ import Blockchain.Data.RLP
 -- (ie- the pointer to the full set of key/value pairs at a particular time in history), and
 -- will be of interest if you need to refer to older or parallel version of the data.
 
-newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq)
+newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq, Read)
 
 instance Pretty SHAPtr where
   pretty (SHAPtr x) = yellow $ text $ BC.unpack (B16.encode x)
