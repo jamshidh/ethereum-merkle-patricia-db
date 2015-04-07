@@ -1,0 +1,8 @@
+rm -rf /tmp/tmpDB
+cabal test
+cd /tmp/
+mv tmpDB state
+mkdir tmpDB
+mv state tmpDB/
+
+stateDBClient t fb69dda647b3a199e08d25b3b3b6a7be3b9de83fb9745ce937b129a2fc9e6e75
