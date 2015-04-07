@@ -19,10 +19,12 @@ module Blockchain.Database.MerklePatricia (
   Key,
   Val,
   initializeBlank,
+
   putKeyVal,
   getKeyVals,
   deleteKey,
   keyExists,
+
   MPDB(..),
   openMPDB,
   SHAPtr(..),
@@ -30,7 +32,7 @@ module Blockchain.Database.MerklePatricia (
   ) where
 
 import Control.Monad.Trans.Resource
-import qualified Crypto.Hash.SHA3 as C
+import qualified Crypto.Hash.SHA3 as SHA3
 import qualified Data.ByteString as B
 import Data.Default
 import Data.Function
@@ -54,7 +56,7 @@ initializeBlank::MPDB->ResourceT IO ()
 initializeBlank db =
     let bytes = rlpSerialize $ rlpEncode (0::Integer)
     in
-      DB.put (ldb db) def (C.hash 256 bytes) bytes
+      DB.put (ldb db) def (SHA3.hash 256 bytes) bytes
 
 
 getNodeData::MPDB->NodeRef->ResourceT IO NodeData
@@ -94,13 +96,8 @@ getKeyVals_NodeRef db ref key = do
   nodeData <- getNodeData db ref
   getKeyVals_NodeData db nodeData key
 
--- | Retrieves all key/value pairs whose key starts with the given parameter.
-
-
-getKeyVals::MPDB -- ^ Object containing the current stateRoot.
-          ->Key -- ^ The partial key (the query will return any key that is prefixed by this value)
-          ->ResourceT IO [(Key, Val)] -- ^ The requested data.
-getKeyVals db = 
+unsafeGetKeyVals::MPDB->Key->ResourceT IO [(Key, Val)]
+unsafeGetKeyVals db = 
   getKeyVals_NodeRef db (PtrRef $ stateRoot db)
 
 ------------------------------------
@@ -141,7 +138,7 @@ newShortcut db key val = nodeData2NodeRef db $ ShortcutNodeData key val
 putNodeData::MPDB->NodeData->ResourceT IO SHAPtr
 putNodeData db nd = do
   let bytes = rlpSerialize $ rlpEncode nd
-      ptr = C.hash 256 bytes
+      ptr = SHA3.hash 256 bytes
   DB.put (ldb db) def ptr bytes
   return $ SHAPtr ptr
 
@@ -217,13 +214,9 @@ putKV_NodeData db key1 val1 (ShortcutNodeData key2 val2) = do
       (list2Options 0 (sortBy (compare `on` fst) [(N.head key1, tailNode1), (N.head key2, tailNode2)]))
       Nothing
 
--- | Adds a new key/value pair.
-putKeyVal::MPDB -- ^ The object containing the current stateRoot.
-         ->Key -- ^ Key of the data to be inserted.
-         ->Val -- ^ Value of the new data
-         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the insert.
+unsafePutKeyVal::MPDB->Key->Val->ResourceT IO MPDB
 --putKeyVal db key val | trace ("^^^^^^^^^^putKeyVal: key = " ++ show (pretty key) ++ ", val = " ++ show (pretty val)) False = undefined
-putKeyVal db key val = do
+unsafePutKeyVal db key val = do
   p <- putNodeData db =<< putKV_NodeData db key val =<< getNodeData db (PtrRef $ stateRoot db)
   return db{stateRoot=p}
 
@@ -293,29 +286,61 @@ deleteKey_NodeData db key (FullNodeData options val) = do
 -------------
 
 
--- | Deletes a key (and its corresponding data) from the database.
--- 
--- Note that the key/value pair will still be present in the history, and can be accessed
--- by using an older 'MPDB' object.
-
-deleteKey::MPDB -- ^ The object containing the current stateRoot.
-         ->Key -- ^ The key to be deleted.
-         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the delete.
-deleteKey db key = do
+unsafeDeleteKey::MPDB->Key->ResourceT IO MPDB
+unsafeDeleteKey db key = do
   p <- putNodeData db =<< deleteKey_NodeData db key =<< getNodeData db (PtrRef $ stateRoot db)
   return db{stateRoot=p}
 
--- | Returns True is a key exists.
-keyExists::MPDB -- ^ The object containing the current stateRoot.
-         ->Key -- ^ The key to be deleted.
-         ->ResourceT IO Bool -- ^ True if the key exists
-keyExists db key = do
-  vals <- getKeyVals db key
+unsafeKeyExists::MPDB->Key->ResourceT IO Bool
+unsafeKeyExists db key = do
+  vals <- unsafeGetKeyVals db key
   return $ not . null $ filter ((key ==) . fst) vals
-
 
 prependToKey::Key->(Key, Val)->(Key, Val)
 prependToKey prefix (key, val) = (prefix `N.append` key, val)
 
 
 
+------------
+
+
+
+keyToSafeKey::N.NibbleString->N.NibbleString
+keyToSafeKey key =
+  N.EvenNibbleString $ SHA3.hash 256 keyByteString
+  where
+    N.EvenNibbleString keyByteString = key
+
+
+
+-- | Adds a new key/value pair.
+putKeyVal::MPDB -- ^ The object containing the current stateRoot.
+         ->Key -- ^ Key of the data to be inserted.
+         ->Val -- ^ Value of the new data
+         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the insert.
+--putKeyVal db key val | trace ("^^^^^^^^^^putKeyVal: key = " ++ show (pretty key) ++ ", val = " ++ show (pretty val)) False = undefined
+putKeyVal db = unsafePutKeyVal db . keyToSafeKey
+
+
+
+
+-- | Retrieves all key/value pairs whose key starts with the given parameter.
+getKeyVals::MPDB -- ^ Object containing the current stateRoot.
+          ->Key -- ^ The partial key (the query will return any key that is prefixed by this value)
+          ->ResourceT IO [(Key, Val)] -- ^ The requested data.
+getKeyVals db = unsafeGetKeyVals db . keyToSafeKey
+
+-- | Deletes a key (and its corresponding data) from the database.
+-- 
+-- Note that the key/value pair will still be present in the history, and can be accessed
+-- by using an older 'MPDB' object.
+deleteKey::MPDB -- ^ The object containing the current stateRoot.
+         ->Key -- ^ The key to be deleted.
+         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the delete.
+deleteKey db = unsafeDeleteKey db . keyToSafeKey
+
+-- | Returns True is a key exists.
+keyExists::MPDB -- ^ The object containing the current stateRoot.
+         ->Key -- ^ The key to be deleted.
+         ->ResourceT IO Bool -- ^ True if the key exists
+keyExists db = unsafeKeyExists db . keyToSafeKey
