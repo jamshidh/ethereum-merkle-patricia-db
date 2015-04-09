@@ -22,6 +22,7 @@ module Blockchain.Database.MerklePatricia (
 
   putKeyVal,
   getKeyVals,
+  unsafeGetKeyVals,
   deleteKey,
   keyExists,
 
