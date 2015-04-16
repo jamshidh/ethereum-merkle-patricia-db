@@ -223,6 +223,8 @@ unsafePutKeyVal db key val = do
 
 --------------------
 
+{-
+
 --The "simplify" functions are only used to canonicalize the DB after a delete.
 --We need to concatinate ShortcutNodeData links, convert FullNodeData to ShortcutNodeData when possible, etc.
 
@@ -253,6 +255,9 @@ simplify_NodeData _ x = return x
 
 ----------
 
+-}
+
+
 --TODO- This is looking like a lift, I probably should make NodeRef some sort of Monad....
 
 deleteKey_NodeRef::MPDB->Key->NodeRef->ResourceT IO NodeRef
@@ -270,7 +275,8 @@ deleteKey_NodeData _ key1 (ShortcutNodeData key2 (Right _)) | key2 == key1 = ret
 deleteKey_NodeData _ _ nd@(ShortcutNodeData _ (Right _)) = return nd
 deleteKey_NodeData db key1 (ShortcutNodeData key2 (Left ref)) | key2 `N.isPrefixOf` key1 = do
   newNodeRef <- deleteKey_NodeRef db (N.drop (N.length key2) key1) ref
-  simplify_NodeData db $ ShortcutNodeData key2 $ Left newNodeRef
+  --simplify_NodeData db $ ShortcutNodeData key2 $ Left newNodeRef
+  return $ ShortcutNodeData key2 $ Left newNodeRef
 deleteKey_NodeData _ _ nd@(ShortcutNodeData _ (Left _)) = return nd
 
 
@@ -282,7 +288,8 @@ deleteKey_NodeData db key (FullNodeData options val) = do
     let nodeRef = options!!fromIntegral (N.head key)
     newNodeRef <- deleteKey_NodeRef db (N.tail key) nodeRef
     let newOptions = replace options (N.head key) newNodeRef
-    simplify_NodeData db $ FullNodeData newOptions val
+    --simplify_NodeData db $ FullNodeData newOptions val
+    return $ FullNodeData newOptions val
 
 -------------
 
