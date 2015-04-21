@@ -41,6 +41,7 @@ import Data.Functor
 import Data.List
 import Data.Maybe
 import qualified Data.NibbleString as N
+import Data.Word
 import qualified Database.LevelDB as DB
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
@@ -59,6 +60,13 @@ initializeBlank db =
     in
       DB.put (ldb db) def (SHA3.hash 256 bytes) bytes
 
+--This conversion is needed when reading from the GO peer DB
+{-
+removeFEFF::[Word8]->[Word8]
+removeFEFF [] = []
+removeFEFF (0xFE:0xFF:rest) = 0xFE:removeFEFF rest
+removeFEFF (x:rest) = x:removeFEFF rest
+-}
 
 getNodeData::MPDB->NodeRef->ResourceT IO NodeData
 getNodeData _ (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
@@ -69,7 +77,8 @@ getNodeData db (PtrRef ptr@(SHAPtr p)) = do
     where
       bytes2NodeData::B.ByteString->NodeData
       bytes2NodeData bytes | B.null bytes = EmptyNodeData
-      bytes2NodeData bytes = rlpDecode $ rlpDeserialize bytes
+      --bytes2NodeData bytes = rlpDecode $ rlpDeserialize $ B.pack $ removeFEFF $ B.unpack bytes 
+      bytes2NodeData bytes = rlpDecode $ rlpDeserialize $ B.pack $ B.unpack bytes
 
 -------------------------
 
@@ -223,8 +232,6 @@ unsafePutKeyVal db key val = do
 
 --------------------
 
-{-
-
 --The "simplify" functions are only used to canonicalize the DB after a delete.
 --We need to concatinate ShortcutNodeData links, convert FullNodeData to ShortcutNodeData when possible, etc.
 
@@ -240,23 +247,23 @@ simplify_NodeRef db ref = nodeData2NodeRef db =<< simplify_NodeData db =<< getNo
 simplify_NodeData::MPDB->NodeData->ResourceT IO NodeData
 simplify_NodeData _ EmptyNodeData = return EmptyNodeData
 simplify_NodeData db nd@(ShortcutNodeData key (Left ref)) = do
-  refNodeData <- simplify_NodeData db =<< getNodeData db ref
+  refNodeData <- getNodeData db ref
+  --refNodeData <- simplify_NodeData db =<< getNodeData db ref
   case refNodeData of
     (ShortcutNodeData key2 v2) -> return $ ShortcutNodeData (key `N.append` key2) v2
     _ -> return nd
 simplify_NodeData db (FullNodeData options Nothing) = do
-    simplifiedOptions <- sequence $ simplify_NodeRef db <$> options
+    --simplifiedOptions <- sequence $ simplify_NodeRef db <$> options
 
-    case options2List simplifiedOptions of
+    --case options2List simplifiedOptions of
+    case options2List options of
       [(n, nodeRef)] ->
           simplify_NodeData db $ ShortcutNodeData (N.singleton n) $ Left nodeRef
-      _ -> return $ FullNodeData simplifiedOptions Nothing
+      -- _ -> return $ FullNodeData simplifiedOptions Nothing
+      _ -> return $ FullNodeData options Nothing
 simplify_NodeData _ x = return x
 
 ----------
-
--}
-
 
 --TODO- This is looking like a lift, I probably should make NodeRef some sort of Monad....
 
@@ -275,8 +282,8 @@ deleteKey_NodeData _ key1 (ShortcutNodeData key2 (Right _)) | key2 == key1 = ret
 deleteKey_NodeData _ _ nd@(ShortcutNodeData _ (Right _)) = return nd
 deleteKey_NodeData db key1 (ShortcutNodeData key2 (Left ref)) | key2 `N.isPrefixOf` key1 = do
   newNodeRef <- deleteKey_NodeRef db (N.drop (N.length key2) key1) ref
-  --simplify_NodeData db $ ShortcutNodeData key2 $ Left newNodeRef
-  return $ ShortcutNodeData key2 $ Left newNodeRef
+  simplify_NodeData db $ ShortcutNodeData key2 $ Left newNodeRef
+  --return $ ShortcutNodeData key2 $ Left newNodeRef
 deleteKey_NodeData _ _ nd@(ShortcutNodeData _ (Left _)) = return nd
 
 
@@ -288,8 +295,8 @@ deleteKey_NodeData db key (FullNodeData options val) = do
     let nodeRef = options!!fromIntegral (N.head key)
     newNodeRef <- deleteKey_NodeRef db (N.tail key) nodeRef
     let newOptions = replace options (N.head key) newNodeRef
-    --simplify_NodeData db $ FullNodeData newOptions val
-    return $ FullNodeData newOptions val
+    simplify_NodeData db $ FullNodeData newOptions val
+    --return $ FullNodeData newOptions val
 
 -------------
 
