@@ -30,6 +30,7 @@ module Blockchain.Database.MerklePatricia (
   openMPDB,
   SHAPtr(..),
   emptyTriePtr,
+  sha2SHAPtr
   ) where
 
 import Control.Monad.Trans.Resource

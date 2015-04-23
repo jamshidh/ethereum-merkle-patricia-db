@@ -2,7 +2,8 @@
 
 module Blockchain.Database.MerklePatricia.SHAPtr (
   SHAPtr(..),
-  emptyTriePtr
+  emptyTriePtr,
+  sha2SHAPtr
   ) where
 
 import Control.Monad
@@ -15,6 +16,8 @@ import Data.Functor
 import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Data.RLP
+import Blockchain.ExtWord
+import Blockchain.SHA
 
 -- | Internal nodes are indexed in the underlying database by their 256-bit SHA3 hash.
 -- This types represents said hash.
@@ -39,3 +42,7 @@ instance RLPSerializable SHAPtr where
 -- | The stateRoot of the empty database.
 emptyTriePtr::SHAPtr
 emptyTriePtr = SHAPtr $ C.hash 256 $ rlpSerialize $ rlpEncode (0::Integer)
+
+sha2SHAPtr::SHA->SHAPtr
+sha2SHAPtr (SHA x) = SHAPtr $ B.pack $ word256ToBytes x
+
