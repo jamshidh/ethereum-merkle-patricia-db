@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric     #-}
 
 module Blockchain.Database.MerklePatricia.SHAPtr (
   SHAPtr(..),
@@ -19,6 +20,8 @@ import Blockchain.Data.RLP
 import Blockchain.ExtWord
 import Blockchain.SHA
 
+import GHC.Generics
+
 -- | Internal nodes are indexed in the underlying database by their 256-bit SHA3 hash.
 -- This types represents said hash.
 --
@@ -26,7 +29,7 @@ import Blockchain.SHA
 -- (ie- the pointer to the full set of key/value pairs at a particular time in history), and
 -- will be of interest if you need to refer to older or parallel version of the data.
 
-newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq, Read)
+newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq, Read, Generic)
 
 instance Pretty SHAPtr where
   pretty (SHAPtr x) = yellow $ text $ BC.unpack (B16.encode x)
