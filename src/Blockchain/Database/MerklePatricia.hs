@@ -72,7 +72,10 @@ removeFEFF (x:rest) = x:removeFEFF rest
 getNodeData::MPDB->NodeRef->ResourceT IO NodeData
 getNodeData _ (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
 getNodeData db (PtrRef ptr@(SHAPtr p)) = do
-  bytes <- fromMaybe (error $ "Missing SHAPtr in call to getNodeData: " ++ show (pretty ptr)) <$>
+  bytes <- fromMaybe
+           --(error $ "Missing SHAPtr in call to getNodeData: " ++ show (pretty ptr))
+           B.empty
+           <$>
            DB.get (ldb db) def p
   return $ bytes2NodeData bytes
     where
