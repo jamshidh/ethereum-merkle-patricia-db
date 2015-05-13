@@ -38,6 +38,7 @@ library
                  , ansi-wl-pprint
     exposed-modules:
                    Blockchain.Database.MerklePatricia
+                   Blockchain.Database.MerklePatricia.Internal
     other-modules:
                    Blockchain.Database.MerklePatricia.MPDB
                    Blockchain.Database.MerklePatricia.SHAPtr
