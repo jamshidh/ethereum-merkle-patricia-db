@@ -1,30 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
--- This is an implementation of the modified Merkle Patricia database
--- described in the Ethereum Yellowpaper
--- (<http://gavwood.com/paper.pdf>).  This modified version works like a
--- canonical Merkle Patricia database, but includes certain
--- optimizations.  In particular, a new type of "shortcut node" has been
--- added to represent multiple traditional nodes that fall in a linear
--- string (ie- a stretch of parent child nodes where no branch choices
--- exist).
-
--- A Merkle Patricia Database effeciently retains its full history, and a
--- snapshot of all key-value pairs at a given time can be looked up using
--- a "stateRoot" (a pointer to the root of the tree representing that
--- data).  Many of the functions in this module work by updating this
--- object, so for anything more complicated than a single update, use of
--- the state monad is recommended.
-
--- The underlying data is actually stored in LevelDB.  This module
--- provides the logic to organize the key-value pairs in the appropriate
--- Patricia Merkle Tree.
-
 module Blockchain.Database.MerklePatricia.Internal (
   Key, Val, MPDB(..), SHAPtr(..),
   openMPDB, emptyTriePtr, sha2SHAPtr,
-  unsafePutKeyVal, unsafeGetKeyVals, unsafeDeleteKey, keyToSafeKey,
-  initializeBlank, getCommonPrefix, replace, prependToKey
+  unsafePutKeyVal, unsafeGetKeyVals, unsafeGetAllKeyVals,unsafeDeleteKey,
+  keyToSafeKey, getCommonPrefix, replace, prependToKey
   ) where
 
 import Control.Monad.Trans.Resource
@@ -55,6 +35,9 @@ unsafeGetKeyVals::MPDB->Key->ResourceT IO [(Key, Val)]
 unsafeGetKeyVals db =
   let dbNodeRef = PtrRef $ stateRoot db
   in getKeyVals_NodeRef db dbNodeRef
+
+unsafeGetAllKeyVals::MPDB->ResourceT IO [(Key, Val)]
+unsafeGetAllKeyVals db = unsafeGetKeyVals db N.empty
 
 unsafeDeleteKey::MPDB->Key->ResourceT IO MPDB
 unsafeDeleteKey db key = do
@@ -303,8 +286,3 @@ getCommonPrefix (c1:rest1) (c2:rest2)
     prefixTheCommonPrefix c (p, x, y) = (c:p, x, y)
 getCommonPrefix x y = ([], x, y)
 
-initializeBlank::MPDB->ResourceT IO ()
-initializeBlank db =
-    let bytes = rlpSerialize $ rlpEncode (0::Integer)
-    in
-      DB.put (ldb db) def (SHA3.hash 256 bytes) bytes

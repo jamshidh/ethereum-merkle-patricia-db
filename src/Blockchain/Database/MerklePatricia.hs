@@ -1,13 +1,38 @@
+-- | This is an implementation of the modified Merkle Patricia database
+-- described in the Ethereum Yellowpaper
+-- (<http://gavwood.com/paper.pdf>).  This modified version works like a
+-- canonical Merkle Patricia database, but includes certain
+-- optimizations.  In particular, a new type of "shortcut node" has been
+-- added to represent multiple traditional nodes that fall in a linear
+-- string (ie- a stretch of parent child nodes where no branch choices
+-- exist).
+--
+-- A Merkle Patricia Database effeciently retains its full history, and a
+-- snapshot of all key-value pairs at a given time can be looked up using
+-- a "stateRoot" (a pointer to the root of the tree representing that
+-- data).  Many of the functions in this module work by updating this
+-- object, so for anything more complicated than a single update, use of
+-- the state monad is recommended.
+--
+-- The underlying data is actually stored in LevelDB.  This module
+-- provides the logic to organize the key-value pairs in the appropriate
+-- Patricia Merkle Tree.
+
 module Blockchain.Database.MerklePatricia (
   Key, Val, MPDB(..), SHAPtr(..),
   openMPDB, emptyTriePtr, sha2SHAPtr,
-  putKeyVal, getAllKeyVals, getKeyVal, deleteKey, keyExists
+  putKeyVal, getKeyVal, deleteKey, keyExists,
+  initializeBlank
   ) where
 
+import qualified Crypto.Hash.SHA3 as SHA3
 import Control.Monad.Trans.Resource
+import Data.Default
 import Data.Functor ((<$>))
 import Data.Maybe (isJust)
-import qualified Data.NibbleString as N
+import qualified Database.LevelDB as DB
+
+import Blockchain.Data.RLP
 import Blockchain.Database.MerklePatricia.Internal
 
 
@@ -18,13 +43,10 @@ putKeyVal::MPDB -- ^ The object containing the current stateRoot.
          ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the insert.
 putKeyVal db = unsafePutKeyVal db . keyToSafeKey
 
-
 -- | Retrieves all key/value pairs whose key starts with the given parameter.
-getAllKeyVals::MPDB -- ^ Object containing the current stateRoot.
-             ->ResourceT IO [(Key, Val)] -- ^ The requested data.
-getAllKeyVals db = unsafeGetKeyVals db N.empty
-
-getKeyVal::MPDB -> Key -> ResourceT IO (Maybe Val)
+getKeyVal::MPDB -- ^ Object containing the current stateRoot.
+         -> Key -- ^ Key of the data to be inserted.
+         -> ResourceT IO (Maybe Val) -- ^ The requested value.
 getKeyVal db key = do
   vals <- unsafeGetKeyVals db (keyToSafeKey key)
   return $
@@ -48,3 +70,13 @@ keyExists::MPDB -- ^ The object containing the current stateRoot.
          ->Key -- ^ The key to be deleted.
          ->ResourceT IO Bool -- ^ True if the key exists
 keyExists db key = isJust <$> getKeyVal db key
+
+
+-- | Initialize the DB by adding a blank stateroot.
+initializeBlank::MPDB -- ^ The object containing the current stateRoot.
+               ->ResourceT IO ()
+initializeBlank db =
+    let bytes = rlpSerialize $ rlpEncode (0::Integer)
+    in
+      DB.put (ldb db) def (SHA3.hash 256 bytes) bytes
+
