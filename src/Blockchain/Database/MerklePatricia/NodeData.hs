@@ -55,7 +55,7 @@ data NodeData =
   ShortcutNodeData {
     nextNibbleString::Key,
     nextVal::Either NodeRef Val
-  } deriving Show
+  } deriving (Show, Eq)
       
 formatVal::Maybe RLPObject->Doc
 formatVal Nothing = red $ text "NULL"
