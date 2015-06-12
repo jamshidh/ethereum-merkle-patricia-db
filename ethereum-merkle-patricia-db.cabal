@@ -36,9 +36,11 @@ library
                  , ethereum-rlp
                  , binary
                  , ansi-wl-pprint
+                 , transformers
     exposed-modules:
                    Blockchain.Database.MerklePatricia
                    Blockchain.Database.MerklePatricia.Internal
+                   Blockchain.Database.MerklePatricia.Diff
     other-modules:
                    Blockchain.Database.MerklePatricia.MPDB
                    Blockchain.Database.MerklePatricia.SHAPtr
