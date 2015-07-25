@@ -31,6 +31,7 @@ library
                  , base16-bytestring
                  , data-default
                  , ethereum-util
+                 , mtl
                  , nibblestring
                  , leveldb-haskell
                  , ethereum-rlp

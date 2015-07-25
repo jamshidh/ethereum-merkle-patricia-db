@@ -11,11 +11,11 @@ import Data.Function
 import qualified Data.NibbleString as N
 
 -- Probably the entire MPDB system ought to be in this monad
-type MPReaderM = ReaderT MPDB (ResourceT IO)
+type MPReaderM a = ReaderT MPDB a
 
 data MPChoice = Data NodeData | Ref NodeRef | Value Val | None deriving (Eq)
 
-node :: MPChoice -> MPReaderM NodeData
+node :: MonadResource m=>MPChoice -> MPReaderM m NodeData
 node (Data nd) = return nd
 node (Ref nr) = do
   derefNode <- asks getNodeData 
@@ -36,7 +36,7 @@ simplify n@ShortcutNodeData{ nextNibbleString = k, nextVal = v } = None : delta 
       | otherwise = Data n{ nextNibbleString = t }
     (h,t) = (fromIntegral $ N.head k, N.tail k)
 
-enter :: MPChoice -> MPReaderM [MPChoice]
+enter :: MonadResource m=>MPChoice -> MPReaderM m [MPChoice]
 enter = liftM simplify . node
 
 data DiffOp =
@@ -45,7 +45,7 @@ data DiffOp =
   Delete {key::[N.Nibble]}
   deriving (Show, Eq)
 
-diffChoice :: Maybe N.Nibble -> MPChoice -> MPChoice -> MPReaderM [DiffOp]
+diffChoice :: MonadResource m=>Maybe N.Nibble -> MPChoice -> MPChoice -> MPReaderM m [DiffOp]
 diffChoice n ch1 ch2 = case (ch1, ch2) of
   (None, Value v) -> return [Create sn v]
   (Value _, None) -> return [Delete sn]
@@ -60,20 +60,20 @@ diffChoice n ch1 ch2 = case (ch1, ch2) of
       in map (maybe id prepend n)
     pRecurse = liftM prefix .* recurse
 
-diffChoices :: [MPChoice] -> [MPChoice] -> MPReaderM [DiffOp]
+diffChoices :: MonadResource m=>[MPChoice] -> [MPChoice] -> MPReaderM m [DiffOp]
 diffChoices =
   liftM concat .* sequence .* zipWith3 diffChoice maybeNums 
   where maybeNums = Nothing : map Just [0..]
 
-recurse :: MPChoice -> MPChoice -> MPReaderM [DiffOp]
+recurse :: MonadResource m=>MPChoice -> MPChoice -> MPReaderM m [DiffOp]
 recurse = join .* (liftM2 diffChoices `on` enter)
 
 infixr 9 .*
 (.*) :: (c -> d) -> (a -> b -> c) -> (a -> b -> d)
 (.*) = (.) . (.)
 
-diff :: NodeRef -> NodeRef -> MPReaderM [DiffOp]
+diff :: MonadResource m=>NodeRef -> NodeRef -> MPReaderM m [DiffOp]
 diff = recurse `on` Ref
 
-dbDiff :: MPDB -> SHAPtr -> SHAPtr -> ResourceT IO [DiffOp]
+dbDiff :: MonadResource m => MPDB -> SHAPtr -> SHAPtr -> m [DiffOp]
 dbDiff db root1 root2 = runReaderT ((diff `on` PtrRef) root1 root2) db

@@ -26,6 +26,8 @@ module Blockchain.Database.MerklePatricia (
   ) where
 
 import qualified Crypto.Hash.SHA3 as SHA3
+import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Data.Default
 import Data.Functor ((<$>))
@@ -37,16 +39,16 @@ import Blockchain.Database.MerklePatricia.Internal
 
 
 -- | Adds a new key/value pair.
-putKeyVal::MPDB -- ^ The object containing the current stateRoot.
-         ->Key -- ^ Key of the data to be inserted.
-         ->Val -- ^ Value of the new data
-         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the insert.
+putKeyVal::MonadResource m=>MPDB -- ^ The object containing the current stateRoot.
+           ->Key -- ^ Key of the data to be inserted.
+           ->Val -- ^ Value of the new data
+           ->m MPDB -- ^ The object containing the stateRoot to the data after the insert.
 putKeyVal db = unsafePutKeyVal db . keyToSafeKey
 
 -- | Retrieves all key/value pairs whose key starts with the given parameter.
-getKeyVal::MPDB -- ^ Object containing the current stateRoot.
+getKeyVal::MonadResource m=>MPDB -- ^ Object containing the current stateRoot.
          -> Key -- ^ Key of the data to be inserted.
-         -> ResourceT IO (Maybe Val) -- ^ The requested value.
+         -> m (Maybe Val) -- ^ The requested value.
 getKeyVal db key = do
   vals <- unsafeGetKeyVals db (keyToSafeKey key)
   return $
@@ -60,21 +62,21 @@ getKeyVal db key = do
 -- 
 -- Note that the key/value pair will still be present in the history, and
 -- can be accessed by using an older 'MPDB' object.
-deleteKey::MPDB -- ^ The object containing the current stateRoot.
+deleteKey::MonadResource m=>MPDB -- ^ The object containing the current stateRoot.
          ->Key -- ^ The key to be deleted.
-         ->ResourceT IO MPDB -- ^ The object containing the stateRoot to the data after the delete.
+         ->m MPDB -- ^ The object containing the stateRoot to the data after the delete.
 deleteKey db = unsafeDeleteKey db . keyToSafeKey
 
 -- | Returns True is a key exists.
-keyExists::MPDB -- ^ The object containing the current stateRoot.
+keyExists::MonadResource m=>MPDB -- ^ The object containing the current stateRoot.
          ->Key -- ^ The key to be deleted.
-         ->ResourceT IO Bool -- ^ True if the key exists
+         ->m Bool -- ^ True if the key exists
 keyExists db key = isJust <$> getKeyVal db key
 
 
 -- | Initialize the DB by adding a blank stateroot.
-initializeBlank::MPDB -- ^ The object containing the current stateRoot.
-               ->ResourceT IO ()
+initializeBlank::MonadResource m=>MPDB -- ^ The object containing the current stateRoot.
+               ->m ()
 initializeBlank db =
     let bytes = rlpSerialize $ rlpEncode (0::Integer)
     in

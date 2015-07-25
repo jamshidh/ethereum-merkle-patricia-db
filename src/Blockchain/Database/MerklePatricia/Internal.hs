@@ -8,6 +8,8 @@ module Blockchain.Database.MerklePatricia.Internal (
   keyToSafeKey, getCommonPrefix, replace, prependToKey
   ) where
 
+import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as SHA3
 import qualified Data.ByteString as B
@@ -25,22 +27,22 @@ import Blockchain.Database.MerklePatricia.MPDB
 import Blockchain.Database.MerklePatricia.NodeData
 import Blockchain.Database.MerklePatricia.SHAPtr
 
-unsafePutKeyVal::MPDB->Key->Val->ResourceT IO MPDB
+unsafePutKeyVal::MonadResource m=>MPDB->Key->Val->m MPDB
 unsafePutKeyVal db key val = do
   dbNodeData <- getNodeData db (PtrRef $ stateRoot db)
   dbPutNodeData <- putKV_NodeData db key val dbNodeData
   p <- putNodeData db dbPutNodeData
   return db{stateRoot=p}
 
-unsafeGetKeyVals::MPDB->Key->ResourceT IO [(Key, Val)]
+unsafeGetKeyVals::MonadResource m=>MPDB->Key->m [(Key, Val)]
 unsafeGetKeyVals db =
   let dbNodeRef = PtrRef $ stateRoot db
   in getKeyVals_NodeRef db dbNodeRef
 
-unsafeGetAllKeyVals::MPDB->ResourceT IO [(Key, Val)]
+unsafeGetAllKeyVals::MonadResource m=>MPDB->m [(Key, Val)]
 unsafeGetAllKeyVals db = unsafeGetKeyVals db N.empty
 
-unsafeDeleteKey::MPDB->Key->ResourceT IO MPDB
+unsafeDeleteKey::MonadResource m=>MPDB->Key->m MPDB
 unsafeDeleteKey db key = do
   dbNodeData <- getNodeData db (PtrRef $ stateRoot db)
   dbDeleteNodeData <- deleteKey_NodeData db key dbNodeData
@@ -55,7 +57,7 @@ keyToSafeKey key =
 
 -----
 
-putKV_NodeData::MPDB->Key->Val->NodeData->ResourceT IO NodeData
+putKV_NodeData::MonadResource m=>MPDB->Key->Val->NodeData->m NodeData
 
 putKV_NodeData _ key val EmptyNodeData =
   return $ ShortcutNodeData key (Right val)
@@ -114,7 +116,7 @@ putKV_NodeData db key1 val1 (ShortcutNodeData key2 val2)
 
 -----
 
-getKeyVals_NodeData::MPDB->NodeData->Key->ResourceT IO [(Key, Val)]
+getKeyVals_NodeData::MonadResource m=>MPDB->NodeData->Key->m [(Key, Val)]
 
 getKeyVals_NodeData _ EmptyNodeData _ = return []
 
@@ -143,7 +145,7 @@ getKeyVals_NodeData _ ShortcutNodeData{nextNibbleString=s, nextVal=Right val} ke
                 
 -----
 
-deleteKey_NodeData::MPDB->Key->NodeData->ResourceT IO NodeData
+deleteKey_NodeData::MonadResource m=>MPDB->Key->NodeData->m NodeData
 
 deleteKey_NodeData _ _ EmptyNodeData = return EmptyNodeData
 
@@ -173,27 +175,27 @@ deleteKey_NodeData db key1 nd@(ShortcutNodeData key2 (Left ref))
 
 -----
 
-putKV_NodeRef::MPDB->Key->Val->NodeRef->ResourceT IO NodeRef
+putKV_NodeRef::MonadResource m=>MPDB->Key->Val->NodeRef->m NodeRef
 putKV_NodeRef db key val nodeRef = do
   nodeData <- getNodeData db nodeRef
   newNodeData <- putKV_NodeData db key val nodeData
   nodeData2NodeRef db newNodeData
 
 
-getKeyVals_NodeRef::MPDB->NodeRef->Key->ResourceT IO [(Key, Val)]
+getKeyVals_NodeRef::MonadResource m=>MPDB->NodeRef->Key->m [(Key, Val)]
 getKeyVals_NodeRef db ref key = do
   nodeData <- getNodeData db ref
   getKeyVals_NodeData db nodeData key
 
 --TODO- This is looking like a lift, I probably should make NodeRef some sort of Monad....
 
-deleteKey_NodeRef::MPDB->Key->NodeRef->ResourceT IO NodeRef
+deleteKey_NodeRef::MonadResource m=>MPDB->Key->NodeRef->m NodeRef
 deleteKey_NodeRef db key nodeRef =
   nodeData2NodeRef db =<< deleteKey_NodeData db key =<< getNodeData db nodeRef
 
 -----
 
-getNodeData::MPDB->NodeRef->ResourceT IO NodeData
+getNodeData::MonadResource m=>MPDB->NodeRef->m NodeData
 getNodeData _ (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
 getNodeData db (PtrRef ptr@(SHAPtr p)) = do
   bytes <-
@@ -206,7 +208,7 @@ getNodeData db (PtrRef ptr@(SHAPtr p)) = do
       bytes2NodeData bytes | B.null bytes = EmptyNodeData
       bytes2NodeData bytes = rlpDecode $ rlpDeserialize $ B.pack $ B.unpack bytes
 
-putNodeData::MPDB->NodeData->ResourceT IO SHAPtr
+putNodeData::MonadResource m=>MPDB->NodeData->m SHAPtr
 putNodeData db nd = do
   let bytes = rlpSerialize $ rlpEncode nd
       ptr = SHA3.hash 256 bytes
@@ -226,7 +228,7 @@ putNodeData db nd = do
 -- the whole database.  The delete function only will "break" the
 -- canonical structure locally, so deep recursion isn't required.
 
-simplify_NodeData::MPDB->NodeData->ResourceT IO NodeData
+simplify_NodeData::MonadResource m=>MPDB->NodeData->m NodeData
 simplify_NodeData _ EmptyNodeData = return EmptyNodeData
 simplify_NodeData db nd@(ShortcutNodeData key (Left ref)) = do
   refNodeData <- getNodeData db ref
@@ -242,11 +244,11 @@ simplify_NodeData _ x = return x
 
 -----
 
-newShortcut::MPDB->Key->Either NodeRef Val->ResourceT IO NodeRef
+newShortcut::MonadResource m=>MPDB->Key->Either NodeRef Val->m NodeRef
 newShortcut _ "" (Left ref) = return ref
 newShortcut db key val = nodeData2NodeRef db $ ShortcutNodeData key val
 
-nodeData2NodeRef::MPDB->NodeData->ResourceT IO NodeRef
+nodeData2NodeRef::MonadResource m=>MPDB->NodeData->m NodeRef
 nodeData2NodeRef db nodeData =
   case rlpSerialize $ rlpEncode nodeData of
     bytes | B.length bytes < 32 -> return $ SmallRef bytes
