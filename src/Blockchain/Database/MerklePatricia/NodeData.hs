@@ -20,6 +20,7 @@ import Numeric
 
 import Blockchain.Data.RLP
 import Blockchain.Database.MerklePatricia.SHAPtr
+import Blockchain.Format
 
 --import Debug.Trace
 
@@ -40,7 +41,7 @@ emptyRef = SmallRef $ B.pack [0x80]
 
 instance Pretty NodeRef where
   pretty (SmallRef x) = green $ text $ BC.unpack $ B16.encode x
-  pretty (PtrRef x) = green $ pretty x
+  pretty (PtrRef x) = green $ text $ format x
 
 -------------------------
 

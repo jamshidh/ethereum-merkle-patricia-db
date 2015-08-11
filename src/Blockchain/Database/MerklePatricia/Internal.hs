@@ -26,6 +26,7 @@ import Blockchain.Data.RLP
 import Blockchain.Database.MerklePatricia.MPDB
 import Blockchain.Database.MerklePatricia.NodeData
 import Blockchain.Database.MerklePatricia.SHAPtr
+import Blockchain.Format
 
 unsafePutKeyVal::MonadResource m=>MPDB->Key->Val->m MPDB
 unsafePutKeyVal db key val = do
@@ -200,7 +201,7 @@ getNodeData _ (SmallRef x) = return $ rlpDecode $ rlpDeserialize x
 getNodeData db (PtrRef ptr@(SHAPtr p)) = do
   bytes <-
     fromMaybe
-    (error $ "Missing SHAPtr in call to getNodeData: " ++ show (pretty ptr)) <$>
+    (error $ "Missing SHAPtr in call to getNodeData: " ++ format ptr) <$>
     DB.get (ldb db) def p
   return $ bytes2NodeData bytes
     where

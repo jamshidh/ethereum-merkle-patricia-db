@@ -14,10 +14,11 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import Data.Functor
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
+import qualified Blockchain.Colors as CL
 import Blockchain.Data.RLP
 import Blockchain.ExtWord
+import Blockchain.Format
 import Blockchain.SHA
 
 import GHC.Generics
@@ -31,8 +32,8 @@ import GHC.Generics
 
 newtype SHAPtr = SHAPtr B.ByteString deriving (Show, Eq, Read, Generic)
 
-instance Pretty SHAPtr where
-  pretty (SHAPtr x) = yellow $ text $ BC.unpack (B16.encode x)
+instance Format SHAPtr where
+  format (SHAPtr x) = CL.yellow $ BC.unpack $ B16.encode x
 
 instance Binary SHAPtr where
   put (SHAPtr x) = sequence_ $ put <$> B.unpack x
