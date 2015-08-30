@@ -8,8 +8,6 @@ module Blockchain.Database.MerklePatricia.Internal (
   keyToSafeKey, getCommonPrefix, replace, prependToKey
   ) where
 
-import Control.Monad.IO.Class
-import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import qualified Crypto.Hash.SHA3 as SHA3
 import qualified Data.ByteString as B
@@ -20,7 +18,6 @@ import Data.List
 import Data.Maybe
 import qualified Data.NibbleString as N
 import qualified Database.LevelDB as DB
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.Data.RLP
 import Blockchain.Database.MerklePatricia.MPDB

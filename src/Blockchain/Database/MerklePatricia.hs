@@ -26,8 +26,6 @@ module Blockchain.Database.MerklePatricia (
   ) where
 
 import qualified Crypto.Hash.SHA3 as SHA3
-import Control.Monad.IO.Class
-import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Data.Default
 import Data.Functor ((<$>))
